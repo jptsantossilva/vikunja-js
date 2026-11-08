@@ -15,20 +15,23 @@ function getAllState() {
 export const saveCollapsedBucketState = (
 	projectId: IProject['id'],
 	collapsedBuckets: CollapsedBuckets,
+	viewId?: number,
 ) => {
 	const state = getAllState()
-	state[projectId] = collapsedBuckets
-	for (const bucketId in state[projectId]) {
-		if (!state[projectId][bucketId]) {
-			delete state[projectId][bucketId]
+	const stateKey = typeof viewId === 'undefined' ? projectId : `${projectId}:${viewId}`
+	state[stateKey] = collapsedBuckets
+	for (const bucketId in state[stateKey]) {
+		if (!state[stateKey][bucketId]) {
+			delete state[stateKey][bucketId]
 		}
 	}
 	localStorage.setItem(key, JSON.stringify(state))
 }
 
-export function getCollapsedBucketState(projectId : IProject['id']) {
+export function getCollapsedBucketState(projectId : IProject['id'], viewId?: number) {
 	const state = getAllState()
-	return typeof state[projectId] !== 'undefined'
-		? state[projectId]
+	const stateKey = typeof viewId === 'undefined' ? projectId : `${projectId}:${viewId}`
+	return typeof state[stateKey] !== 'undefined'
+		? state[stateKey]
 		: {}
 }

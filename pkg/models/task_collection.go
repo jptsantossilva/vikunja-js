@@ -48,6 +48,9 @@ type TaskCollection struct {
 
 	// If set to true, the result will also include null values
 	FilterIncludeNulls bool `query:"filter_include_nulls" json:"filter_include_nulls"`
+	// OverrideViewFilter replaces the saved view filter for this request instead of combining with it.
+	// This is intended for previewing unsaved view layouts and does not bypass task permissions.
+	OverrideViewFilter bool `query:"override_view_filter" json:"-"`
 
 	// If set to `subtasks`, Vikunja will fetch only tasks which do not have subtasks and then in a
 	// second step, will fetch all of these subtasks. This may result in more tasks than the
@@ -319,7 +322,7 @@ func (tf *TaskCollection) ReadAll(s *xorm.Session, a web.Auth, search string, pa
 			return nil, 0, 0, err
 		}
 
-		if view.Filter != nil {
+		if view.Filter != nil && !tf.OverrideViewFilter {
 			if view.Filter.Filter != "" {
 				if tf.Filter != "" {
 					tf.Filter = "(" + tf.Filter + ") && (" + view.Filter.Filter + ")"
@@ -335,6 +338,10 @@ func (tf *TaskCollection) ReadAll(s *xorm.Session, a web.Auth, search string, pa
 			if view.Filter.Search != "" {
 				search = view.Filter.Search
 			}
+
+			// Explicit request sorting takes precedence over saved view sorting.
+			tf.SortBy = append(tf.SortBy, view.Filter.SortBy...)
+			tf.OrderBy = append(tf.OrderBy, view.Filter.OrderBy...)
 		}
 
 		if strings.Contains(tf.Filter, taskPropertyBucketID) {

@@ -20,58 +20,184 @@
 				<Icon icon="arrow-left" />
 				{{ $t('task.detail.back') }}
 			</BaseButton>
-			<Heading
-				ref="heading"
-				:task="task"
-				:can-write="canWrite"
-				:has-close="isModal"
-				@update:task="Object.assign(task, $event)"
-				@close="$emit('close')"
-			/>
-			<h6
-				v-if="project?.id"
-				class="subtitle"
-			>
-				<template
-					v-for="p in projectStore.getAncestors(project)"
-					:key="p.id"
-				>
-					<a
-						v-if="router.options.history.state?.back?.includes('/projects/'+p.id+'/') || false"
-						v-shortcut="p.id === project?.id ? 'KeyU' : ''"
-						@click="router.back()"
-					>
-						{{ getProjectTitle(p) }}
-					</a>
-					<RouterLink
-						v-else
-						v-shortcut="p.id === project?.id ? 'KeyU' : ''"
-						:to="{ name: 'project.index', params: { projectId: p.id } }"
-					>
-						{{ getProjectTitle(p) }}
-					</RouterLink>
-					<span
-						v-if="p.id !== project?.id"
-						class="has-text-grey-light"
-					> &gt; </span>
-				</template>
-				<BucketSelect
+			<div class="task-detail-header">
+				<Heading
+					ref="heading"
 					:task="task"
 					:can-write="canWrite"
+					:has-close="isModal"
 					@update:task="Object.assign(task, $event)"
+					@close="$emit('close')"
 				/>
-			</h6>
+				<div class="task-detail-header__actions d-print-none">
+					<XButton
+						v-if="canWrite"
+						v-shortcut="'KeyT'"
+						:icon="task.done ? 'undo' : 'check'"
+						variant="secondary"
+						@click="toggleTaskDone()"
+					>
+						{{ task.done ? $t('task.detail.undone') : $t('task.detail.done') }}
+					</XButton>
+					<TaskSubscription
+						v-if="canWrite"
+						entity="task"
+						:entity-id="task.id"
+						:model-value="task.subscription"
+						:hide-text="true"
+						@update:modelValue="sub => task.subscription = sub"
+					/>
+					<XButton
+						v-if="canWrite"
+						v-shortcut="'KeyS'"
+						v-tooltip="task.isFavorite ? $t('task.detail.actions.unfavorite') : $t('task.detail.actions.favorite')"
+						variant="secondary"
+						:icon="task.isFavorite ? 'star' : ['far', 'star']"
+						:aria-label="task.isFavorite ? $t('task.detail.actions.unfavorite') : $t('task.detail.actions.favorite')"
+						@click="toggleFavorite"
+					/>
+					<Dropdown>
+						<DropdownItem
+							icon="link"
+							@click="copyTaskUrl"
+						>
+							{{ $t('task.detail.actions.copyLink') }}
+						</DropdownItem>
+						<DropdownItem
+							v-if="canWrite"
+							icon="list"
+							@click="setFieldActive('moveProject')"
+						>
+							{{ $t('task.detail.actions.moveProject') }}
+						</DropdownItem>
+						<DropdownItem
+							v-if="canWrite"
+							icon="copy"
+							@click="duplicateCurrentTask"
+						>
+							{{ $t('task.detail.actions.duplicate') }}
+						</DropdownItem>
+						<DropdownItem
+							v-if="canWrite"
+							class="has-text-danger"
+							icon="trash-alt"
+							@click="showDeleteModal = true"
+						>
+							{{ $t('task.detail.actions.delete') }}
+						</DropdownItem>
+					</Dropdown>
+				</div>
+			</div>
+
+			<div class="task-primary-properties">
+				<div class="task-primary-property task-primary-property--project">
+					<span class="task-primary-property__label">{{ $t('task.attributes.project') }}</span>
+					<h6
+						v-if="project?.id"
+						class="subtitle"
+					>
+						<template
+							v-for="p in projectStore.getAncestors(project)"
+							:key="p.id"
+						>
+							<a
+								v-if="typeof router.options.history.state?.back === 'string' && router.options.history.state.back.includes('/projects/'+p.id+'/')"
+								v-shortcut="p.id === project?.id ? 'KeyU' : ''"
+								@click="router.back()"
+							>
+								{{ getProjectTitle(p) }}
+							</a>
+							<RouterLink
+								v-else
+								v-shortcut="p.id === project?.id ? 'KeyU' : ''"
+								:to="{ name: 'project.index', params: { projectId: p.id } }"
+							>
+								{{ getProjectTitle(p) }}
+							</RouterLink>
+							<span
+								v-if="p.id !== project?.id"
+								class="has-text-grey-light"
+							> &gt; </span>
+						</template>
+						<BucketSelect
+							:task="task"
+							:can-write="canWrite"
+							@update:task="Object.assign(task, $event)"
+						/>
+					</h6>
+				</div>
+				<div class="task-primary-property assignees">
+					<span class="task-primary-property__label">{{ $t('task.attributes.assignees') }}</span>
+					<EditAssignees
+						v-if="canWrite"
+						v-model="task.assignees"
+						:project-id="task.projectId"
+						:task-id="task.id"
+					/>
+					<AssigneeList
+						v-else
+						:assignees="task.assignees"
+					/>
+				</div>
+				<div class="task-primary-property">
+					<span class="task-primary-property__label">{{ $t('task.attributes.dueDate') }}</span>
+					<Datepicker
+						v-model="task.dueDate"
+						:choose-date-label="$t('task.detail.chooseDueDate')"
+						:disabled="taskService.loading || !canWrite"
+						@closeOnChange="saveTask()"
+					/>
+				</div>
+				<div class="task-primary-property">
+					<span class="task-primary-property__label">{{ $t('task.attributes.priority') }}</span>
+					<PrioritySelect
+						v-model="task.priority"
+						:disabled="!canWrite"
+						@update:modelValue="setPriority"
+					/>
+				</div>
+				<div class="task-primary-property">
+					<span class="task-primary-property__label">{{ $t('task.attributes.percentDone') }}</span>
+					<PercentDoneSelect
+						v-model="task.percentDone"
+						:disabled="!canWrite"
+						@update:modelValue="setPercentDone"
+					/>
+				</div>
+				<div class="task-primary-property task-primary-property--labels">
+					<span class="task-primary-property__label">{{ $t('task.attributes.labels') }}</span>
+					<EditLabels
+						v-model="task.labels"
+						:disabled="!canWrite"
+						:task-id="taskId"
+						:creatable="!authStore.isLinkShareAuth"
+					/>
+				</div>
+			</div>
+
+			<TaskAdvancedProperties
+				:task="task"
+				:can-write="canWrite"
+				:collapsed="advancedCollapsed"
+				:color="taskColor"
+				:default-relative-to="remindersDefaultRelativeTo"
+				@patch="saveAdvancedPatch"
+				@update:color="saveAdvancedColor"
+				@update:collapsed="advancedCollapsed = $event"
+			/>
 
 			<ChecklistSummary :task="task" />
 
 			<!-- Content and buttons -->
-			<div class="columns mbs-2">
+			<div class="task-detail-layout mbs-2">
 				<!-- Content -->
 				<div
-					:class="{'is-two-thirds': canWrite}"
-					class="column detail-content"
+					class="detail-content"
 				>
-					<div class="columns details">
+					<div
+						v-if="showLegacyProperties"
+						class="columns details"
+					>
 						<div
 							v-if="activeFields.assignees"
 							class="column assignees"
@@ -314,7 +440,7 @@
 
 					<!-- Labels -->
 					<div
-						v-if="activeFields.labels"
+						v-if="showLegacyProperties && activeFields.labels"
 						class="labels-list details"
 					>
 						<div class="detail-title">
@@ -333,7 +459,7 @@
 					</div>
 
 					<!-- Description -->
-					<div class="details content description">
+					<div class="details content description task-detail__description">
 						<Description
 							:model-value="task"
 							:can-write="canWrite"
@@ -347,14 +473,14 @@
 						v-model="task.reactions" 
 						entity-kind="tasks"
 						:entity-id="task.id"
-						class="details"
+						class="details task-detail__reactions"
 						:disabled="!canWrite"
 					/>
 
 					<!-- Attachments -->
 					<div
-						v-show="activeFields.attachments || hasAttachments"
-						class="content attachments"
+						v-show="canWrite || activeFields.attachments || hasAttachments"
+						class="content attachments task-detail__attachments"
 					>
 						<Attachments
 							:ref="e => { setFieldRef('attachments', e); attachmentsRef = e as any }"
@@ -367,8 +493,8 @@
 
 					<!-- Related Tasks -->
 					<div
-						v-if="activeFields.relatedTasks"
-						class="content details mbe-0"
+						v-if="canWrite || activeFields.relatedTasks"
+						class="content details mbe-0 task-detail__relations"
 					>
 						<h3>
 							<span class="icon is-grey">
@@ -389,7 +515,7 @@
 					<!-- Move Task -->
 					<div
 						v-if="activeFields.moveProject"
-						class="content details"
+						class="content details task-detail__move"
 					>
 						<h3>
 							<span class="icon is-grey">
@@ -410,6 +536,7 @@
 
 					<!-- Comments -->
 					<Comments
+						class="task-detail__comments"
 						:can-write="canWrite"
 						:task-id="taskId"
 						:project-id="task.projectId"
@@ -423,9 +550,9 @@
 					/>
 				</div>
 				
-				<!-- Task Actions -->
+				<!-- Legacy task actions kept temporarily for shortcut compatibility. -->
 				<div
-					v-if="canWrite || isModal"
+					v-if="showLegacyProperties && (canWrite || isModal)"
 					class="column is-one-third action-buttons d-print-none"
 				>
 					<template v-if="canWrite">
@@ -590,7 +717,7 @@
 			</div>
 			<!-- Created / Updated [by] -->
 			<CreatedUpdated
-				v-if="!canWrite && !isModal"
+				v-if="showLegacyProperties && !canWrite && !isModal"
 				:task="task"
 			/>
 		</div>
@@ -630,7 +757,14 @@
 import {ref, reactive, shallowReactive, computed, watch, nextTick, onMounted} from 'vue'
 import {useRouter, useRoute, type RouteLocation, onBeforeRouteLeave} from 'vue-router'
 import {useI18n} from 'vue-i18n'
-import {unrefElement, useDebounceFn, useElementSize, useIntersectionObserver, useMutationObserver} from '@vueuse/core'
+import {
+	unrefElement,
+	useDebounceFn,
+	useElementSize,
+	useIntersectionObserver,
+	useLocalStorage,
+	useMutationObserver,
+} from '@vueuse/core'
 import {klona} from 'klona/lite'
 
 import TaskService from '@/services/task'
@@ -644,6 +778,8 @@ import {PRIORITIES, type Priority} from '@/constants/priorities'
 import {PERMISSIONS} from '@/constants/permissions'
 
 import BaseButton from '@/components/base/BaseButton.vue'
+import Dropdown from '@/components/misc/Dropdown.vue'
+import DropdownItem from '@/components/misc/DropdownItem.vue'
 
 // partials
 import Attachments from '@/components/tasks/partials/Attachments.vue'
@@ -667,6 +803,7 @@ import CustomTransition from '@/components/misc/CustomTransition.vue'
 import AssigneeList from '@/components/tasks/partials/AssigneeList.vue'
 import BucketSelect from '@/components/tasks/partials/BucketSelect.vue'
 import Reactions from '@/components/input/Reactions.vue'
+import TaskAdvancedProperties from '@/components/tasks/partials/TaskAdvancedProperties.vue'
 
 import {uploadFile} from '@/helpers/attachments'
 import {getProjectTitle} from '@/helpers/getProjectTitle'
@@ -675,6 +812,7 @@ import {scrollIntoView} from '@/helpers/scrollIntoView'
 import {TASK_REPEAT_MODES} from '@/types/IRepeatMode'
 import {REMINDER_PERIOD_RELATIVE_TO_TYPES} from '@/types/IReminderPeriodRelativeTo'
 import {playPopSound} from '@/helpers/playPop'
+import {useCopyToClipboard} from '@/composables/useCopyToClipboard'
 
 import {useTaskStore} from '@/stores/tasks'
 import {useBucketStore} from '@/stores/buckets'
@@ -700,6 +838,12 @@ defineEmits<{
 const router = useRouter()
 const route = useRoute()
 const {t} = useI18n({useScope: 'global'})
+const copy = useCopyToClipboard()
+const advancedCollapsed = useLocalStorage(
+	'vikunja:task-detail:advanced-collapsed',
+	true,
+)
+const showLegacyProperties = false
 
 const projectStore = useProjectStore()
 const taskStore = useTaskStore()
@@ -1145,10 +1289,28 @@ async function duplicateCurrentTask() {
 	}
 }
 
-async function setPriority(priority: Priority) {
+async function copyTaskUrl() {
+	const resolved = router.resolve({
+		name: 'task.detail',
+		params: {id: task.value.id},
+	})
+	await copy(new URL(resolved.href, window.location.href).href)
+	success({message: t('task.detail.linkCopied')})
+}
+
+async function saveAdvancedPatch(patch: Partial<ITask>) {
+	await saveTask({...task.value, ...patch})
+}
+
+async function saveAdvancedColor(hexColor: string) {
+	taskColor.value = hexColor
+	await saveTask({...task.value, hexColor})
+}
+
+async function setPriority(priority: number) {
 	const newTask: ITask = {
 		...task.value,
-		priority,
+		priority: priority as Priority,
 	}
 
 	return saveTask(newTask)
@@ -1187,20 +1349,23 @@ function setRelatedTasksActive() {
 .task-view-container {
 	// simulate sass lighten($primary, 30) by increasing lightness 30% to 73%
 	--primary-light: hsla(var(--primary-h), var(--primary-s), 73%, var(--primary-a));
-	padding-block-end: 0;
+	padding: .5rem;
 
 	@media screen and (min-width: $desktop) {
-		padding-block-end: 1rem;
+		padding: 1rem;
 	}
 }
 
 .task-view {
-	padding-block-start: 1rem;
-	padding-inline: .5rem;
-	background-color: var(--site-background);
+	min-block-size: calc(100vh - #{$navbar-height} - 4rem);
+	padding: 1rem;
+	border: 1px solid var(--grey-200);
+	border-radius: $radius;
+	background-color: var(--white);
+	box-shadow: var(--shadow-xs);
 
 	@media screen and (min-width: $desktop) {
-		padding: 1rem;
+		padding: 1.5rem 2rem 2rem;
 	}
 }
 
@@ -1208,7 +1373,7 @@ function setRelatedTasksActive() {
 	border-radius: $radius;
 	padding: 1rem;
 	color: var(--text);
-	background-color: var(--site-background) !important;
+	background-color: var(--white) !important;
 
 	@media screen and (width <= calc(#{$desktop} + 1px)) {
 		border-radius: 0;
@@ -1221,6 +1386,183 @@ function setRelatedTasksActive() {
 
 .is-loading .task-view * {
 	opacity: 0;
+}
+
+.task-detail-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1rem;
+
+	:deep(.heading) {
+		flex: 1 1 auto;
+		min-inline-size: 0;
+	}
+}
+
+.task-detail-header__actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: .375rem;
+	flex: 0 0 auto;
+
+	:deep(.button) {
+		background: transparent;
+		box-shadow: none;
+		font-weight: 400;
+		text-transform: none;
+		white-space: nowrap;
+
+		&:hover,
+		&:focus-visible {
+			background: var(--grey-100);
+			box-shadow: none;
+		}
+	}
+}
+
+.task-primary-properties {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(18rem, 1fr));
+	column-gap: 2rem;
+	row-gap: .125rem;
+	margin-block: 1rem .75rem;
+	padding-block: .75rem;
+	border-block: 1px solid var(--grey-200);
+}
+
+.task-primary-property {
+	display: grid;
+	grid-template-columns: minmax(6.5rem, .3fr) minmax(0, 1fr);
+	align-items: center;
+	gap: 1rem;
+	min-inline-size: 0;
+	min-block-size: 2.75rem;
+	padding: .375rem .5rem;
+
+	.subtitle {
+		margin: 0;
+	}
+}
+
+.task-primary-property__label {
+	display: block;
+	margin: 0;
+	color: var(--grey-500);
+	font-size: .75rem;
+	font-weight: 400;
+}
+
+.task-detail-layout {
+	display: block;
+	margin-block-start: 1.5rem !important;
+}
+
+.detail-content {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-inline-size: 0;
+
+	.task-detail__description {
+		order: 1;
+		padding-block-end: .75rem;
+	}
+
+	.task-detail__reactions {
+		order: 2;
+		margin: 0;
+		padding-block-end: 1.75rem;
+		border-block-end: 1px solid var(--grey-200);
+	}
+
+	.task-detail__relations {
+		order: 3;
+		margin: 0;
+		padding-block: 1.75rem;
+		border-block-end: 1px solid var(--grey-200);
+	}
+
+	.task-detail__attachments {
+		order: 4;
+		margin: 0;
+		padding-block: 1.75rem;
+		border-block-end: 1px solid var(--grey-200);
+	}
+
+	.task-detail__move {
+		order: 5;
+		padding-block: 1.75rem;
+		border-block-end: 1px solid var(--grey-200);
+	}
+
+	.task-detail__comments {
+		order: 6;
+		margin: 0;
+		padding-block-start: 1.75rem;
+	}
+
+	.content-bottom-marker {
+		order: 7;
+	}
+
+	@media print {
+		inline-size: 100% !important;
+	}
+}
+
+@media screen and (max-width: $desktop) {
+	.task-detail-header {
+		flex-direction: column;
+	}
+
+	.task-detail-header__actions {
+		inline-size: 100%;
+		justify-content: flex-start;
+		flex-wrap: wrap;
+	}
+
+	.task-primary-properties {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media screen and (max-width: $mobile) {
+	.task-view-container {
+		padding: 0;
+	}
+
+	.task-view {
+		border-inline: 0;
+		border-radius: 0;
+		box-shadow: none;
+	}
+
+	.task-primary-property {
+		grid-template-columns: 1fr;
+		gap: .25rem;
+	}
+
+	.task-detail-layout {
+		margin-block-start: 1rem !important;
+	}
+
+	.detail-content {
+		.task-detail__reactions {
+			padding-block-end: 1.25rem;
+		}
+
+		.task-detail__relations,
+		.task-detail__attachments,
+		.task-detail__move {
+			padding-block: 1.25rem;
+		}
+
+		.task-detail__comments {
+			padding-block-start: 1.25rem;
+		}
+	}
 }
 
 
@@ -1405,12 +1747,6 @@ h3 .button {
 
 .checklist-summary {
 	padding-inline-start: .25rem;
-}
-
-.detail-content {
-	@media print {
-		inline-size: 100% !important;
-	}
 }
 
 .action-heading {

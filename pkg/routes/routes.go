@@ -562,12 +562,20 @@ func registerAPIRoutes(a *echo.Group) {
 	}
 	a.POST("/tasks/:task/position", taskPositionHandler.UpdateWeb)
 
+	taskHierarchyPositionHandler := &handler.WebHandler{
+		EmptyStruct: func() handler.CObject {
+			return &models.TaskHierarchyPosition{}
+		},
+	}
+	a.POST("/tasks/:task/hierarchy-position", taskHierarchyPositionHandler.UpdateWeb)
+
 	bulkTaskHandler := &handler.WebHandler{
 		EmptyStruct: func() handler.CObject {
 			return &models.BulkTask{}
 		},
 	}
 	a.POST("/tasks/bulk", bulkTaskHandler.UpdateWeb)
+	a.DELETE("/tasks/bulk", bulkTaskHandler.DeleteWeb)
 
 	assigneeTaskHandler := &handler.WebHandler{
 		EmptyStruct: func() handler.CObject {

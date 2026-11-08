@@ -128,6 +128,104 @@ type ProjectViewBucketConfiguration struct {
 	Filter *TaskCollection `json:"filter"`
 }
 
+const ProjectViewLayoutVersion = 1
+
+var projectViewLayoutColumnWidths = map[string][2]int{
+	"done":          {44, 64},
+	"title":         {240, 900},
+	"index":         {72, 140},
+	"project":       {120, 320},
+	"assignees":     {120, 320},
+	"due_date":      {120, 240},
+	"priority":      {110, 220},
+	"labels":        {140, 420},
+	"start_date":    {120, 240},
+	"end_date":      {120, 240},
+	"percent_done":  {110, 180},
+	"comment_count": {90, 160},
+	"done_at":       {120, 240},
+	"created":       {120, 240},
+	"updated":       {120, 240},
+	"created_by":    {120, 260},
+}
+
+var projectViewLayoutGroupFields = map[string]bool{
+	"section":  true,
+	"project":  true,
+	"assignee": true,
+	"due_date": true,
+	"priority": true,
+	"label":    true,
+	"done":     true,
+}
+
+type ProjectViewLayoutColumn struct {
+	Field string `json:"field"`
+	Width int    `json:"width"`
+}
+
+type ProjectViewLayoutGroup struct {
+	Field     string `json:"field"`
+	Order     string `json:"order"`
+	ShowEmpty bool   `json:"show_empty"`
+}
+
+// ProjectViewLayout contains presentation-only settings for task-based views.
+// Task data, filters and sort parameters remain in their existing models.
+type ProjectViewLayout struct {
+	Version int                        `json:"version"`
+	Mode    string                     `json:"mode"`
+	Columns []*ProjectViewLayoutColumn `json:"columns"`
+	Group   *ProjectViewLayoutGroup    `json:"group,omitempty"`
+}
+
+func (l *ProjectViewLayout) validateAndNormalize() error {
+	if l == nil {
+		return nil
+	}
+	if l.Version == 0 {
+		l.Version = ProjectViewLayoutVersion
+	}
+	if l.Version != ProjectViewLayoutVersion {
+		return InvalidFieldErrorWithMessage([]string{"layout.version"}, "Unsupported project view layout version")
+	}
+	if l.Mode != "compact" && l.Mode != "grid" {
+		return InvalidFieldErrorWithMessage([]string{"layout.mode"}, "Project view layout mode must be compact or grid")
+	}
+
+	seen := make(map[string]bool, len(l.Columns))
+	for _, column := range l.Columns {
+		bounds, exists := projectViewLayoutColumnWidths[column.Field]
+		if !exists || seen[column.Field] {
+			return InvalidFieldErrorWithMessage([]string{"layout.columns"}, "Project view layout contains an invalid or duplicate column")
+		}
+		seen[column.Field] = true
+		if column.Width < bounds[0] {
+			column.Width = bounds[0]
+		}
+		if column.Width > bounds[1] {
+			column.Width = bounds[1]
+		}
+	}
+	if !seen["done"] || !seen["title"] {
+		return InvalidFieldErrorWithMessage([]string{"layout.columns"}, "Project view layout requires done and title columns")
+	}
+
+	if l.Group != nil {
+		if !projectViewLayoutGroupFields[l.Group.Field] {
+			return InvalidFieldErrorWithMessage([]string{"layout.group.field"}, "Unsupported project view group field")
+		}
+		if l.Group.Order == "" {
+			l.Group.Order = "asc"
+		}
+		if l.Group.Order != "asc" && l.Group.Order != "desc" {
+			return InvalidFieldErrorWithMessage([]string{"layout.group.order"}, "Project view group order must be asc or desc")
+		}
+	}
+
+	return nil
+}
+
 type ProjectView struct {
 	// The unique numeric id of this view
 	ID int64 `xorm:"autoincr not null unique pk" json:"id" param:"view"`
@@ -151,6 +249,8 @@ type ProjectView struct {
 	DefaultBucketID int64 `xorm:"bigint INDEX null" json:"default_bucket_id"`
 	// If tasks are moved to the done bucket, they are marked as done. If they are marked as done individually, they are moved into the done bucket.
 	DoneBucketID int64 `xorm:"bigint INDEX null" json:"done_bucket_id"`
+	// Presentation settings for list and table views. A null layout preserves the legacy UI.
+	Layout *ProjectViewLayout `xorm:"json null default null" json:"layout,omitempty"`
 
 	// A timestamp when this view was updated. You cannot change this value.
 	Updated time.Time `xorm:"updated not null" json:"updated"`
@@ -282,6 +382,9 @@ func (pv *ProjectView) Create(s *xorm.Session, a web.Auth) (err error) {
 }
 
 func createProjectView(s *xorm.Session, p *ProjectView, a web.Auth, createBacklogBucket bool, addExistingTasksToView bool) (err error) {
+	if err = p.Layout.validateAndNormalize(); err != nil {
+		return err
+	}
 	if p.Filter != nil && p.Filter.Filter != "" {
 		_, err = getTaskFiltersFromFilterString(p.Filter.Filter, p.Filter.FilterTimezone)
 		if err != nil {
@@ -412,6 +515,9 @@ func addTasksToView(s *xorm.Session, a web.Auth, pv *ProjectView, b *Bucket) (er
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /projects/{project}/views/{id} [post]
 func (pv *ProjectView) Update(s *xorm.Session, _ web.Auth) (err error) {
+	if err = pv.Layout.validateAndNormalize(); err != nil {
+		return err
+	}
 	if pv.Filter != nil && pv.Filter.Filter != "" {
 		_, err = getTaskFiltersFromFilterString(pv.Filter.Filter, pv.Filter.FilterTimezone)
 		if err != nil {
@@ -436,6 +542,7 @@ func (pv *ProjectView) Update(s *xorm.Session, _ web.Auth) (err error) {
 			"bucket_configuration",
 			"default_bucket_id",
 			"done_bucket_id",
+			"layout",
 		).
 		Update(pv)
 	return

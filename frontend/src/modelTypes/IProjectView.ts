@@ -24,19 +24,46 @@ export interface IProjectViewBucketConfiguration {
 	filter: IFilters
 }
 
+export type ProjectViewLayoutMode = 'compact' | 'grid'
+export type ProjectViewLayoutColumnField =
+	'done' | 'title' | 'index' | 'project' | 'assignees' | 'due_date' |
+	'priority' | 'labels' | 'start_date' | 'end_date' | 'percent_done' |
+	'comment_count' | 'done_at' | 'created' | 'updated' | 'created_by'
+export type ProjectViewLayoutGroupField =
+	'section' | 'project' | 'assignee' | 'due_date' | 'priority' | 'label' | 'done'
+
+export interface IProjectViewLayoutColumn {
+	field: ProjectViewLayoutColumnField
+	width: number
+}
+
+export interface IProjectViewLayoutGroup {
+	field: ProjectViewLayoutGroupField
+	order: 'asc' | 'desc'
+	showEmpty: boolean
+}
+
+export interface IProjectViewLayout {
+	version: 1
+	mode: ProjectViewLayoutMode
+	columns: IProjectViewLayoutColumn[]
+	group?: IProjectViewLayoutGroup
+}
+
 export interface IProjectView extends IAbstract {
 	id: number
 	title: string
 	projectId: IProject['id']
 	viewKind: ProjectViewKind
 
-	filter: IFilters|undefined
+	filter: IFilters
 	position: number
 
 	bucketConfigurationMode: ProjectViewBucketConfigurationMode
 	bucketConfiguration: IProjectViewBucketConfiguration[]
 	defaultBucketId: number
 	doneBucketId: number
+	layout?: IProjectViewLayout
 
 	created: Date
 	updated: Date

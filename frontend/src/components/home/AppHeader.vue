@@ -224,6 +224,14 @@ $user-dropdown-width-mobile: 5rem;
 	@media screen and (min-width: $tablet) {
 		padding-inline: var(--navbar-gap-width);
 	}
+
+	@media screen and (min-width: $desktop) {
+		position: absolute;
+		inset-inline-start: 50%;
+		max-inline-size: calc(100vw - 32rem);
+		margin-inline: 0;
+		transform: translateX(-50%);
+	}
 }
 
 .project-title {

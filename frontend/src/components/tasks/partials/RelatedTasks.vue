@@ -1,16 +1,29 @@
 <template>
 	<div class="task-relations">
-		<XButton
-			v-if="editEnabled && Object.keys(relatedTasks).length > 0"
-			id="showRelatedTasksFormButton"
-			v-tooltip="$t('task.relation.add')"
-			class="is-pulled-right add-task-relation-button d-print-none"
-			:class="{'is-active': showNewRelationForm}"
-			variant="secondary"
-			icon="plus"
-			:shadow="false"
-			@click="showNewRelationForm = !showNewRelationForm"
-		/>
+		<div
+			v-if="editEnabled"
+			class="relation-actions d-print-none"
+		>
+			<XButton
+				variant="secondary"
+				icon="plus"
+				:shadow="false"
+				@click="startSubtaskRelation"
+			>
+				{{ $t('task.relation.addSubtask') }}
+			</XButton>
+			<XButton
+				v-if="Object.keys(relatedTasks).length > 0"
+				id="showRelatedTasksFormButton"
+				v-tooltip="$t('task.relation.add')"
+				class="add-task-relation-button"
+				:class="{'is-active': showNewRelationForm}"
+				variant="secondary"
+				icon="sitemap"
+				:shadow="false"
+				@click="showNewRelationForm = !showNewRelationForm"
+			/>
+		</div>
 		<transition-group name="fade">
 			<template v-if="editEnabled && showCreate">
 				<label
@@ -183,7 +196,7 @@
 </template>
 
 <script setup lang="ts">
-import {ref, reactive, shallowReactive, watch, computed} from 'vue'
+import {ref, reactive, shallowReactive, watch, computed, nextTick} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {useRoute} from 'vue-router'
 
@@ -191,7 +204,7 @@ import TaskService from '@/services/task'
 import TaskModel from '@/models/task'
 import type {ITask} from '@/modelTypes/ITask'
 import type {ITaskRelation} from '@/modelTypes/ITaskRelation'
-import {RELATION_KINDS, type IRelationKind} from '@/types/IRelationKind'
+import {RELATION_KIND, RELATION_KINDS, type IRelationKind} from '@/types/IRelationKind'
 
 import TaskRelationService from '@/services/taskRelation'
 import TaskRelationModel from '@/models/taskRelation'
@@ -294,11 +307,21 @@ const mappedRelatedTasks = computed(() => Object.entries(relatedTasks.value).map
 		tasks: mapRelatedTasks(tasks),
 		kind: kind as IRelationKind,
 	}),
-))
+).sort((a, b) => {
+	if (a.kind === 'subtask') return -1
+	if (b.kind === 'subtask') return 1
+	return a.title.localeCompare(b.title)
+}))
 const mappedFoundTasks = computed(() => mapRelatedTasks(foundTasks.value.filter(t => t.id !== props.taskId)))
 
 const taskRelationService = shallowReactive(new TaskRelationService())
 const saved = ref(false)
+
+async function startSubtaskRelation() {
+	newTaskRelation.kind = RELATION_KIND.SUBTASK
+	showNewRelationForm.value = true
+	await nextTick()
+}
 
 async function addTaskRelation() {
 	if (newTaskRelation.task.id === 0 && query.value !== '') {
@@ -391,8 +414,6 @@ async function toggleTaskDone(task: ITask) {
 
 <style lang="scss" scoped>
 .add-task-relation-button {
-	margin-block-start: -3rem;
-
 	svg {
 		transition: transform $transition;
 	}
@@ -400,6 +421,13 @@ async function toggleTaskDone(task: ITask) {
 	&.is-active svg {
 		transform: rotate(45deg);
 	}
+}
+
+.relation-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: .5rem;
+	margin-block: -2.75rem .75rem;
 }
 
 .different-project {

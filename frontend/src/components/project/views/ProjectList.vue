@@ -7,6 +7,28 @@
 	>
 		<template #header>
 			<div class="filter-container">
+				<template v-if="gridMode && layoutDraft.dirty.value">
+					<span
+						v-if="layoutDraft.serverConflict.value"
+						class="has-text-danger"
+					>
+						{{ $t('project.list.viewChangedOnServer') }}
+					</span>
+					<XButton
+						v-if="canAdmin"
+						:disabled="layoutDraft.serverConflict.value"
+						:loading="savingView"
+						@click="saveViewLayout"
+					>
+						{{ $t('project.list.saveView') }}
+					</XButton>
+					<XButton
+						variant="secondary"
+						@click="layoutDraft.reset"
+					>
+						{{ $t('project.list.resetView') }}
+					</XButton>
+				</template>
 				<SortPopup
 					v-model="sortByParam"
 				/>
@@ -22,16 +44,81 @@
 
 		<template #default>
 			<div
-				:class="{ 'is-loading': hasBuckets ? bucketStore.isLoading : loading }"
-				class="loader-container is-max-width-desktop list-view"
+				:class="{
+					'is-loading': hasBuckets ? bucketStore.isLoading : loading,
+					'is-max-width-desktop': !gridMode,
+					'list-view--grid': gridMode,
+				}"
+				class="loader-container list-view"
 			>
 				<Card
 					:padding="false"
 					:has-content="false"
 					class="has-overflow"
 				>
-					<!-- Sectioned mode (list view with manual bucket configuration) -->
-					<template v-if="hasBuckets">
+					<!-- Opt-in grid mode. Compact mode remains unchanged below. -->
+					<template v-if="gridMode">
+						<AddTask
+							v-if="!project?.isArchived && canWrite"
+							ref="addTaskRef"
+							class="list-view__add-task d-print-none"
+							:default-position="firstNewPosition"
+							@taskAdded="updateTaskList"
+						/>
+						<TaskGrid
+							:layout="layoutDraft.layout.value"
+							:tasks="allTasks"
+							:sections="hasBuckets ? buckets : undefined"
+							:can-write="canWrite"
+							:can-reorder="canWrite && isPositionSorting && !hasBuckets"
+							:sort-by-position="isPositionSorting"
+							:view-id="viewId"
+							:collapsed-sections="collapsedBuckets"
+							@update:layout="layoutDraft.update"
+							@updated="handleGridTaskUpdated"
+							@toggleSection="toggleBucketCollapse"
+							@renameSection="saveBucketTitle"
+							@deleteSection="deleteBucketModal"
+							@taskAddedToSection="addTaskToSection"
+							@deleted="handleGridTasksDeleted"
+							@hierarchyMoved="loadTasks(false)"
+						/>
+						<div
+							v-if="hasBuckets && canWrite"
+							class="bucket-section__add"
+						>
+							<div
+								v-if="showNewSectionInput"
+								class="field has-addons bucket-section__add-input"
+							>
+								<div class="control is-expanded">
+									<input
+										v-model="newSectionTitle"
+										v-focus.always
+										class="input"
+										:placeholder="$t('project.list.addSectionPlaceholder')"
+										@keyup.enter="createNewSection"
+										@keyup.esc="showNewSectionInput = false"
+									>
+								</div>
+								<div class="control">
+									<XButton @click="createNewSection">
+										{{ $t('project.list.add') }}
+									</XButton>
+								</div>
+							</div>
+							<ButtonLink
+								v-else
+								@click="showNewSectionInput = true"
+							>
+								<Icon icon="plus" />
+								{{ $t('project.list.addSection') }}
+							</ButtonLink>
+						</div>
+					</template>
+
+					<!-- Sectioned compact mode (list view with manual bucket configuration) -->
+					<template v-else-if="hasBuckets">
 						<AddTask
 							v-if="!project?.isArchived && canWrite"
 							ref="addTaskRef"
@@ -127,11 +214,11 @@
 								@start="handleDragStart"
 								@end="(e) => saveTaskPositionInBucket(e, bucket)"
 							>
-								<template #item="{element: t}">
+								<template #item="{element: task}">
 									<SingleTaskInProject
 										:show-list-color="false"
 										:can-mark-as-done="canWrite || isPseudoProject"
-										:the-task="t"
+										:the-task="task"
 										:all-tasks="getAllTasksFromBuckets()"
 										@taskUpdated="updateTaskInBuckets"
 									>
@@ -252,12 +339,12 @@
 							@start="handleDragStart"
 							@end="saveTaskPosition"
 						>
-							<template #item="{element: t, index}">
+							<template #item="{element: task, index}">
 								<SingleTaskInProject
 									:ref="(el) => setTaskRef(el, index)"
 									:show-list-color="false"
 									:can-mark-as-done="canWrite || isPseudoProject"
-									:the-task="t"
+									:the-task="task"
 									:all-tasks="allTasks"
 									@taskUpdated="updateTasks"
 								>
@@ -276,6 +363,20 @@
 							:current-page="currentPage"
 						/>
 					</template>
+
+					<Modal
+						v-if="gridMode && showSectionDeleteModal"
+						@close="showSectionDeleteModal = false"
+						@submit="deleteSection"
+					>
+						<template #header>
+							{{ $t('project.list.deleteSection') }}
+						</template>
+						<template #text>
+							<p>{{ $t('project.list.deleteSectionText1') }}</p>
+							<p>{{ $t('project.list.deleteSectionText2') }}</p>
+						</template>
+					</Modal>
 				</Card>
 			</div>
 		</template>
@@ -299,9 +400,11 @@ import SortPopup from '@/components/project/partials/SortPopup.vue'
 import Dropdown from '@/components/misc/Dropdown.vue'
 import DropdownItem from '@/components/misc/DropdownItem.vue'
 import Modal from '@/components/misc/Modal.vue'
+import TaskGrid from '@/components/tasks/grid/TaskGrid.vue'
 
 import {useTaskList} from '@/composables/useTaskList'
 import {useTaskDragToProject} from '@/composables/useTaskDragToProject'
+import {useProjectViewLayoutDraft} from '@/composables/useProjectViewLayoutDraft'
 import {shouldShowTaskInListView} from '@/composables/useTaskListFiltering'
 import {PERMISSIONS as Permissions} from '@/constants/permissions'
 import {calculateItemPosition} from '@/helpers/calculateItemPosition'
@@ -312,6 +415,7 @@ import {
 } from '@/helpers/saveCollapsedBucketState'
 import type {ITask} from '@/modelTypes/ITask'
 import type {IBucket} from '@/modelTypes/IBucket'
+import type {ITaskBucket} from '@/modelTypes/ITaskBucket'
 import {isSavedFilter, useSavedFilter} from '@/services/savedFilter'
 import {success} from '@/message'
 
@@ -402,9 +506,9 @@ const projectStore = useProjectStore()
 const {handleTaskDropToProject} = useTaskDragToProject()
 const project = computed(() => baseStore.currentProject)
 
-const canWrite = computed(() => {
-	return project.value?.maxPermission > Permissions.READ && project.value?.id > 0
-})
+const canWrite = computed(() => (project.value?.maxPermission ?? Permissions.READ) > Permissions.READ && (project.value?.id ?? 0) > 0)
+
+const canAdmin = computed(() => (project.value?.maxPermission ?? Permissions.READ) >= Permissions.ADMIN && (project.value?.id ?? 0) > 0)
 
 const isPseudoProject = computed(() => (project.value && isSavedFilter(project.value)) || project.value?.id === -1)
 
@@ -435,6 +539,46 @@ const currentView = computed(() => {
 	return project.value?.views?.find(v => v.id === props.viewId) as IProjectView || null
 })
 
+const layoutDraft = useProjectViewLayoutDraft(
+	() => props.projectId,
+	() => props.viewId,
+	() => currentView.value?.layout,
+	() => currentView.value?.updated,
+)
+const gridMode = computed(() => layoutDraft.layout.value.mode === 'grid')
+const savingView = ref(false)
+
+async function saveViewLayout() {
+	if (!currentView.value || !project.value || layoutDraft.serverConflict.value) return
+	savingView.value = true
+	try {
+		const service = new ProjectViewService()
+		const latestView = await service.get(new ProjectViewModel({
+			id: currentView.value.id,
+			projectId: currentView.value.projectId,
+		}))
+		if (new Date(latestView.updated).getTime() !== new Date(currentView.value.updated).getTime()) {
+			projectStore.setProject({
+				...project.value,
+				views: project.value.views.map(view => view.id === latestView.id ? latestView : view),
+			} as IProject)
+			return
+		}
+		const updatedView = await service.update(new ProjectViewModel({
+			...currentView.value,
+			layout: layoutDraft.layout.value,
+		}))
+		projectStore.setProject({
+			...project.value,
+			views: project.value.views.map(view => view.id === updatedView.id ? updatedView : view),
+		} as IProject)
+		layoutDraft.markSaved(updatedView.layout || layoutDraft.layout.value, updatedView.updated)
+		success({message: t('project.list.viewSaved')})
+	} finally {
+		savingView.value = false
+	}
+}
+
 const hasBuckets = computed(() => {
 	return currentView.value?.bucketConfigurationMode !== 'none'
 		&& currentView.value?.bucketConfigurationMode !== undefined
@@ -449,7 +593,7 @@ watch(
 	async ([pId, vId, bucketed]) => {
 		if (!bucketed) return
 		await bucketStore.loadBucketsForProject(pId, vId, params.value)
-		collapsedBuckets.value = getCollapsedBucketState(pId)
+		collapsedBuckets.value = getCollapsedBucketState(pId, vId)
 	},
 	{immediate: true},
 )
@@ -459,7 +603,7 @@ function toggleBucketCollapse(bucketId: IBucket['id']) {
 		...collapsedBuckets.value,
 		[bucketId]: !collapsedBuckets.value[bucketId],
 	}
-	saveCollapsedBucketState(props.projectId, collapsedBuckets.value)
+	saveCollapsedBucketState(props.projectId, collapsedBuckets.value, props.viewId)
 }
 
 function getAllTasksFromBuckets(): ITask[] {
@@ -468,6 +612,41 @@ function getAllTasksFromBuckets(): ITask[] {
 
 function updateTaskInBuckets(updatedTask: ITask) {
 	bucketStore.setTaskInBucket(updatedTask)
+}
+
+function handleGridTaskUpdated(updatedTask: ITask) {
+	if (hasBuckets.value) {
+		updateTaskInBuckets(updatedTask)
+	} else {
+		updateTasks(updatedTask)
+	}
+}
+
+async function addTaskToSection(task: ITask, bucketId: IBucket['id']) {
+	const taskBucketService = new TaskBucketService()
+	await taskBucketService.update(new TaskBucketModel({
+		taskId: task.id,
+		bucketId,
+		projectViewId: props.viewId,
+		projectId: props.projectId,
+	}) as unknown as ITaskBucket)
+	task.bucketId = bucketId
+	bucketStore.addTaskToBucket(task)
+	baseStore.setHasTasks(true)
+}
+
+function handleGridTasksDeleted(taskIds: number[]) {
+	const deleted = new Set(taskIds)
+	if (hasBuckets.value) {
+		for (const bucket of buckets.value) {
+			for (const task of bucket.tasks.filter(task => deleted.has(task.id))) {
+				bucketStore.removeTaskInBucket(task)
+			}
+		}
+		return
+	}
+	allTasks.value = allTasks.value.filter(task => !deleted.has(task.id))
+	tasks.value = tasks.value.filter(task => !deleted.has(task.id))
 }
 
 async function saveBucketTitle(bucketId: IBucket['id'], bucketTitle: string) {
@@ -811,6 +990,11 @@ onBeforeUnmount(() => {
 	:deep(.card) {
 		margin-block-end: 0;
 	}
+}
+
+.list-view--grid {
+	inline-size: 100%;
+	min-inline-size: 0;
 }
 
 // Bucket section styles

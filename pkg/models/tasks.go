@@ -1130,9 +1130,19 @@ func (t *Task) updateSingleTask(s *xorm.Session, a web.Auth, fields []string) (e
 	// Old task has the stored reminders
 	ot.Reminders = reminders
 
-	// Update the assignees
-	if err := ot.updateTaskAssignees(s, t.Assignees, a); err != nil {
-		return err
+	// A regular task update replaces assignees. A bulk scalar update must leave
+	// relations untouched unless assignees were requested explicitly.
+	updateAssignees := fields == nil
+	for _, field := range fields {
+		if field == "assignees" {
+			updateAssignees = true
+			break
+		}
+	}
+	if updateAssignees {
+		if err := ot.updateTaskAssignees(s, t.Assignees, a); err != nil {
+			return err
+		}
 	}
 
 	// All columns to update in a separate variable to be able to add to them
@@ -1162,6 +1172,10 @@ func (t *Task) updateSingleTask(s *xorm.Session, a web.Auth, fields []string) (e
 		cols := []string{}
 		fieldSet := map[string]bool{}
 		for _, f := range fields {
+			if f == "assignees" {
+				fieldSet[f] = true
+				continue
+			}
 			if !allowed[f] {
 				return ErrInvalidTaskColumn{Column: f}
 			}
@@ -1424,9 +1438,11 @@ func (t *Task) updateSingleTask(s *xorm.Session, a web.Auth, fields []string) (e
 		ot.CoverImageAttachmentID = 0
 	}
 
-	_, err = s.ID(t.ID).
-		Cols(colsToUpdate...).
-		Update(&ot)
+	if len(colsToUpdate) > 0 {
+		_, err = s.ID(t.ID).
+			Cols(colsToUpdate...).
+			Update(&ot)
+	}
 	*t = ot
 	if err != nil {
 		return err
@@ -1453,6 +1469,9 @@ func (t *Task) updateSingleTask(s *xorm.Session, a web.Auth, fields []string) (e
 // updateTasks updates multiple tasks with the same payload.
 // If fields is nil, it updates the default set of columns.
 func updateTasks(s *xorm.Session, a web.Auth, t *Task, ids []int64, fields []string) (tasks []*Task, err error) {
+	if fields == nil {
+		fields = []string{}
+	}
 	for _, id := range ids {
 		nt := clone.Clone(t)
 		nt.ID = id

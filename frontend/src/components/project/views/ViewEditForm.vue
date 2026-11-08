@@ -3,8 +3,10 @@ import {onBeforeMount, ref} from 'vue'
 
 import type {IProjectView} from '@/modelTypes/IProjectView'
 import type {IFilters} from '@/modelTypes/ISavedFilter'
+import ProjectViewModel from '@/models/projectView'
 
 import {hasFilterQuery, transformFilterStringForApi, transformFilterStringFromApi} from '@/helpers/filters'
+import {createDefaultProjectViewLayout, normalizeProjectViewLayout} from '@/helpers/projectViewLayout'
 import {useLabelStore} from '@/stores/labels'
 import {useProjectStore} from '@/stores/projects'
 
@@ -27,23 +29,28 @@ const emit = defineEmits<{
 	'cancel': [],
 }>()
 
-const view = ref<IProjectView>()
+const view = ref<IProjectView>(new ProjectViewModel({}))
+
+const emptyFilter = (): IFilters => ({
+	sort_by: [],
+	order_by: [],
+	filter: '',
+	filter_include_nulls: true,
+	s: '',
+})
 
 const labelStore = useLabelStore()
 const projectStore = useProjectStore()
 
 onBeforeMount(() => {
-	const transformFilterFromApi = (filterInput: IFilters): IFilter => {
+	const transformFilterFromApi = (filterInput: IFilters): IFilters => {
 		const filterString = transformFilterStringFromApi(
 			filterInput.filter,
 			labelId => labelStore.getLabelById(labelId)?.title || null,
 			projectId => projectStore.projects[projectId]?.title || null,
 		)
 		
-		const filter: IFilters = {
-			filter: '',
-			s: '',
-		}
+		const filter = emptyFilter()
 		if (hasFilterQuery(filterString)) {
 			filter.filter = filterString
 		} else {
@@ -63,8 +70,8 @@ onBeforeMount(() => {
 
 	const transformed = {
 		...props.modelValue,
-		filter: transformFilterFromApi(props.modelValue.filter),
-		bucketConfiguration: props.modelValue.bucketConfiguration.map(bc => ({
+		filter: transformFilterFromApi(props.modelValue.filter || emptyFilter()),
+		bucketConfiguration: (props.modelValue.bucketConfiguration || []).map(bc => ({
 			title: bc.title,
 			filter: transformFilterFromApi(bc.filter),
 		})),
@@ -85,7 +92,7 @@ function save() {
 				return found?.id || null
 			},
 		)
-		const filter: IFilters = {}
+		const filter = emptyFilter()
 		if (hasFilterQuery(filterString)) {
 			filter.filter = filterString
 		} else {
@@ -98,7 +105,7 @@ function save() {
 	emit('update:modelValue', {
 		...view.value,
 		filter: transformFilterForApi(view.value?.filter?.filter || ''),
-		bucketConfiguration: view.value?.bucketConfiguration.map(bc => ({
+		bucketConfiguration: view.value.bucketConfiguration.map(bc => ({
 			title: bc.title,
 			filter: transformFilterForApi(bc.filter?.filter || ''),
 		})),
@@ -117,6 +124,14 @@ function handleBubbleSave() {
 	}
 
 	save()
+}
+
+function setListLayoutMode(mode: 'compact' | 'grid') {
+	if (!view.value) {
+		return
+	}
+	view.value.layout = normalizeProjectViewLayout(view.value.layout) || createDefaultProjectViewLayout(mode)
+	view.value.layout.mode = mode
 }
 </script>
 
@@ -158,6 +173,40 @@ function handleBubbleSave() {
 				</div>
 			</template>
 		</FormField>
+
+		<div
+			v-if="view.viewKind === 'list'"
+			class="field"
+		>
+			<label class="label">
+				{{ $t('project.views.layoutMode') }}
+			</label>
+			<div class="control">
+				<label class="radio">
+					<input
+						:checked="!view.layout || view.layout.mode === 'compact'"
+						type="radio"
+						name="layoutMode"
+						value="compact"
+						@change="setListLayoutMode('compact')"
+					>
+					{{ $t('project.views.layoutCompact') }}
+				</label>
+				<label class="radio">
+					<input
+						:checked="view.layout?.mode === 'grid'"
+						type="radio"
+						name="layoutMode"
+						value="grid"
+						@change="setListLayoutMode('grid')"
+					>
+					{{ $t('project.views.layoutGrid') }}
+				</label>
+			</div>
+			<p class="help">
+				{{ $t('project.views.layoutModeHint') }}
+			</p>
+		</div>
 
 		<label
 			class="label"
@@ -254,7 +303,7 @@ function handleBubbleSave() {
 					<XButton
 						variant="secondary"
 						icon="plus"
-						@click="() => view.bucketConfiguration.push({title: '', filter: {filter: ''}})"
+						@click="() => view.bucketConfiguration.push({title: '', filter: emptyFilter()})"
 					>
 						{{ $t('project.kanban.addBucket') }}
 					</XButton>

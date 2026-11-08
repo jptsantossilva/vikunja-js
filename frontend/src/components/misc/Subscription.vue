@@ -5,9 +5,10 @@
 		variant="secondary"
 		:icon="iconName"
 		:disabled="disabled"
+		:aria-label="buttonText"
 		@click="changeSubscription"
 	>
-		{{ buttonText }}
+		<span v-if="!hideText">{{ buttonText }}</span>
 	</XButton>
 	<DropdownItem
 		v-else-if="type === 'dropdown'"
@@ -52,9 +53,11 @@ const props = withDefaults(defineProps<{
 	entityId: number,
 	isButton?: boolean,
 	type?: 'button' | 'dropdown',
+	hideText?: boolean,
 }>(), {
 	isButton: true,
 	type: 'button',
+	hideText: false,
 })
 
 const emit = defineEmits<{

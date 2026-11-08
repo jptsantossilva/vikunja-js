@@ -55,6 +55,27 @@ func TestBulkTask_Update(t *testing.T) {
 		db.AssertExists(t, "tasks", map[string]interface{}{"id": 16, "title": "bulkupdated", "done": false}, false)
 	})
 
+	t.Run("scalar update preserves assignees", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		bt := &BulkTask{
+			TaskIDs: []int64{30},
+			Fields:  []string{"priority"},
+			Values:  &Task{Priority: 3},
+		}
+
+		allowed, err := bt.CanUpdate(s, u)
+		require.NoError(t, err)
+		require.True(t, allowed)
+		require.NoError(t, bt.Update(s, u))
+		require.NoError(t, s.Commit())
+
+		db.AssertExists(t, "task_assignees", map[string]interface{}{"task_id": 30, "user_id": 1}, false)
+		db.AssertExists(t, "task_assignees", map[string]interface{}{"task_id": 30, "user_id": 2}, false)
+	})
+
 	t.Run("unauthorized task prevents update", func(t *testing.T) {
 		db.LoadAndAssertFixtures(t)
 		s := db.NewSession()
@@ -136,4 +157,21 @@ func TestBulkTask_Update(t *testing.T) {
 		var expectedErr ErrInvalidTaskColumn
 		assert.ErrorAs(t, err, &expectedErr)
 	})
+}
+
+func TestBulkTask_Delete(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	u := &user.User{ID: 1}
+	bt := &BulkTask{TaskIDs: []int64{1, 2}}
+	allowed, err := bt.CanDelete(s, u)
+	require.NoError(t, err)
+	require.True(t, allowed)
+	require.NoError(t, bt.Delete(s, u))
+	require.NoError(t, s.Commit())
+
+	db.AssertMissing(t, "tasks", map[string]interface{}{"id": 1})
+	db.AssertMissing(t, "tasks", map[string]interface{}{"id": 2})
 }
