@@ -1313,11 +1313,10 @@ func setTasksInBucketInViews(s *xorm.Session, views []*ProjectView, tasks []*Tas
 
 		for _, view := range views {
 			if setBucket && !moveToDone &&
-				view.ViewKind == ProjectViewKindKanban &&
 				view.BucketConfigurationMode == BucketConfigurationModeManual {
 
 				bucketID := view.DoneBucketID
-				if !t.Done || view.DoneBucketID == 0 {
+				if view.ViewKind != ProjectViewKindKanban || !t.Done || view.DoneBucketID == 0 {
 					if providedBucket != nil && view.ID == providedBucket.ProjectViewID {
 						bucketID = providedBucket.ID
 					} else {
@@ -1328,7 +1327,7 @@ func setTasksInBucketInViews(s *xorm.Session, views []*ProjectView, tasks []*Tas
 					}
 				}
 
-				if view.DoneBucketID != 0 && view.DoneBucketID == t.BucketID && !t.Done {
+				if view.ViewKind == ProjectViewKindKanban && view.DoneBucketID != 0 && view.DoneBucketID == t.BucketID && !t.Done {
 					t.Done = true
 					_, err = s.Where("id = ?", t.ID).
 						Cols("done").
@@ -1552,7 +1551,7 @@ func (t *Task) updateSingleTaskInViews(s *xorm.Session, a web.Auth, fields []str
 	views := []*ProjectView{}
 	if t.Done != ot.Done || t.ProjectID != ot.ProjectID {
 		for _, view := range lockedViews {
-			if view.ProjectID == t.ProjectID && view.ViewKind == ProjectViewKindKanban && view.BucketConfigurationMode == BucketConfigurationModeManual {
+			if view.ProjectID == t.ProjectID && view.BucketConfigurationMode == BucketConfigurationModeManual {
 				views = append(views, view)
 			}
 		}

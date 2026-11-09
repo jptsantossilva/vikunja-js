@@ -40,6 +40,10 @@ func (bt *BulkTask) CanUpdate(s *xorm.Session, a web.Auth) (bool, error) {
 		return false, ErrBulkTaskFieldsRequired{}
 	}
 
+	return bt.canWriteAllTasks(s, a, true)
+}
+
+func (bt *BulkTask) canWriteAllTasks(s *xorm.Session, a web.Auth, checkDestination bool) (bool, error) {
 	tasks, err := GetTasksSimpleByIDs(s, bt.TaskIDs)
 	if err != nil {
 		return false, err
@@ -62,7 +66,7 @@ func (bt *BulkTask) CanUpdate(s *xorm.Session, a web.Auth) (bool, error) {
 	}
 
 	// if tasks are moved to another project, check destination permission
-	if bt.Values != nil && bt.Values.ProjectID != 0 {
+	if checkDestination && bt.Values != nil && bt.Values.ProjectID != 0 {
 		p := &Project{ID: bt.Values.ProjectID}
 		can, err := p.CanWrite(s, a)
 		if err != nil || !can {
@@ -70,6 +74,11 @@ func (bt *BulkTask) CanUpdate(s *xorm.Session, a web.Auth) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+// CanDelete validates all permissions before the first task is removed.
+func (bt *BulkTask) CanDelete(s *xorm.Session, a web.Auth) (bool, error) {
+	return bt.canWriteAllTasks(s, a, false)
 }
 
 // Update updates multiple tasks at once.
@@ -94,5 +103,27 @@ func (bt *BulkTask) Update(s *xorm.Session, a web.Auth) (err error) {
 		return err
 	}
 	bt.Tasks = tasks
+	return nil
+}
+
+// Delete removes all selected tasks in the handler transaction.
+// Permissions for the complete selection are checked by CanDelete first.
+// @Summary Delete multiple tasks
+// @Description Deletes multiple tasks atomically after validating write access to every selected task.
+// @tags task
+// @Accept json
+// @Produce json
+// @Security JWTKeyAuth
+// @Param bulkTask body models.BulkTask true "Bulk task delete payload"
+// @Success 200 {object} models.Message "Tasks deleted"
+// @Failure 400 {object} web.HTTPError "Invalid request"
+// @Failure 403 {object} web.HTTPError "The user does not have access to the tasks"
+// @Router /tasks/bulk [delete]
+func (bt *BulkTask) Delete(s *xorm.Session, a web.Auth) error {
+	for _, taskID := range bt.TaskIDs {
+		if err := (&Task{ID: taskID}).Delete(s, a); err != nil {
+			return err
+		}
+	}
 	return nil
 }

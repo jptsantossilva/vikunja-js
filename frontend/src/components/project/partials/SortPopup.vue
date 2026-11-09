@@ -6,6 +6,7 @@
 		<template #trigger="{toggle}">
 			<XButton
 				ref="trigger"
+				class="project-view-control"
 				variant="secondary"
 				icon="sort"
 				@click.prevent.stop="toggle()"
@@ -116,6 +117,19 @@ function applySort(close: () => void) {
 </script>
 
 <style scoped lang="scss">
+.project-view-control {
+	background: transparent;
+	box-shadow: none;
+	font-weight: 400;
+	text-transform: none;
+
+	&:hover,
+	&:focus-visible {
+		background: var(--grey-100);
+		box-shadow: none;
+	}
+}
+
 .sort-popup {
 	margin: 0;
 	min-inline-size: 18rem;

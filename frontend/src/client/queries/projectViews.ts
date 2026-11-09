@@ -12,9 +12,14 @@ import type {
 import {contextMutationOptions} from './contextMutation'
 import {mapProjectNavigationItem, projectKeys, type ProjectListResult, type ProjectResponse} from './projects'
 import {i18n} from '@/i18n'
+import type {NormalizedProjectViewLayout, ProjectViewLayout} from '@/types/ProjectViewLayout'
+import {normalizeProjectViewLayout} from '@/helpers/projectViewLayout'
 
-export type ProjectViewDraft = Required<Omit<ProjectViewWritable, 'bucket_configuration'>> & {
+export type ProjectViewWritableWithLayout = Omit<ProjectViewWritable, 'layout'> & {layout?: ProjectViewLayout}
+
+export type ProjectViewDraft = Required<Omit<ProjectViewWritableWithLayout, 'bucket_configuration' | 'layout'>> & {
 	bucket_configuration: NonNullable<ProjectViewWritable['bucket_configuration']>
+	layout?: NormalizedProjectViewLayout
 }
 
 export type ProjectViewUpdate = Omit<ProjectViewDraft, 'filter'> & Pick<ProjectViewWritable, 'filter'>
@@ -37,7 +42,7 @@ export function sortProjectViewsByPosition(views: ProjectView[]): ProjectView[] 
 	return [...views].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
 }
 
-export function createProjectViewDraft(view: Partial<ProjectViewWritable> = {}): ProjectViewDraft {
+export function createProjectViewDraft(view: Partial<ProjectViewWritableWithLayout> = {}): ProjectViewDraft {
 	return {
 		title: view.title ?? '',
 		view_kind: view.view_kind ?? 'list',
@@ -54,10 +59,11 @@ export function createProjectViewDraft(view: Partial<ProjectViewWritable> = {}):
 		bucket_configuration: view.bucket_configuration ?? [],
 		default_bucket_id: view.default_bucket_id ?? 0,
 		done_bucket_id: view.done_bucket_id ?? 0,
+		layout: normalizeProjectViewLayout(view.layout),
 	}
 }
 
-export function createProjectViewUpdate(view: Partial<ProjectViewWritable>): ProjectViewUpdate {
+export function createProjectViewUpdate(view: Partial<ProjectViewWritableWithLayout>): ProjectViewUpdate {
 	return {
 		...createProjectViewDraft(view),
 		filter: view.filter,

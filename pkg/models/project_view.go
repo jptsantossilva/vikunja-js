@@ -154,6 +154,103 @@ type ProjectViewBucketConfiguration struct {
 	Filter *TaskCollection `json:"filter" doc:"The filter query that decides which tasks land in this bucket. Combine conditions with && or || (not and/or) and group them with parentheses. Operators: =, !=, >, >=, <, <=, like, in, not in. See https://vikunja.io/docs/filters."`
 }
 
+const ProjectViewLayoutVersion = 1
+
+var projectViewLayoutColumnWidths = map[string][2]int{
+	"done":          {44, 64},
+	"title":         {240, 900},
+	"index":         {72, 140},
+	"project":       {120, 320},
+	"assignees":     {120, 320},
+	"due_date":      {120, 240},
+	"priority":      {110, 220},
+	"labels":        {140, 420},
+	"start_date":    {120, 240},
+	"end_date":      {120, 240},
+	"percent_done":  {110, 180},
+	"comment_count": {90, 160},
+	"done_at":       {120, 240},
+	"created":       {120, 240},
+	"updated":       {120, 240},
+	"created_by":    {120, 260},
+}
+
+var projectViewLayoutGroupFields = map[string]bool{
+	"section":  true,
+	"project":  true,
+	"assignee": true,
+	"due_date": true,
+	"priority": true,
+	"label":    true,
+	"done":     true,
+}
+
+type ProjectViewLayoutColumn struct {
+	Field string `json:"field"`
+	Width int    `json:"width"`
+}
+
+type ProjectViewLayoutGroup struct {
+	Field     string `json:"field"`
+	Order     string `json:"order"`
+	ShowEmpty bool   `json:"show_empty"`
+}
+
+// ProjectViewLayout contains presentation-only settings for task-based views.
+// Task data, filters and sort parameters remain in their existing models.
+type ProjectViewLayout struct {
+	Version int                        `json:"version"`
+	Mode    string                     `json:"mode"`
+	Columns []*ProjectViewLayoutColumn `json:"columns"`
+	Group   *ProjectViewLayoutGroup    `json:"group,omitempty"`
+}
+
+func (l *ProjectViewLayout) validateAndNormalize() error {
+	if l == nil {
+		return nil
+	}
+	if l.Version == 0 {
+		l.Version = ProjectViewLayoutVersion
+	}
+	if l.Version != ProjectViewLayoutVersion {
+		return InvalidFieldErrorWithMessage([]string{"layout.version"}, "Unsupported project view layout version")
+	}
+	if l.Mode != "compact" && l.Mode != "grid" {
+		return InvalidFieldErrorWithMessage([]string{"layout.mode"}, "Project view layout mode must be compact or grid")
+	}
+
+	seen := make(map[string]bool, len(l.Columns))
+	for _, column := range l.Columns {
+		if column == nil {
+			return InvalidFieldErrorWithMessage([]string{"layout.columns"}, "Project view layout contains an invalid column")
+		}
+		bounds, exists := projectViewLayoutColumnWidths[column.Field]
+		if !exists || seen[column.Field] {
+			return InvalidFieldErrorWithMessage([]string{"layout.columns"}, "Project view layout contains an invalid or duplicate column")
+		}
+		seen[column.Field] = true
+		column.Width = max(column.Width, bounds[0])
+		column.Width = min(column.Width, bounds[1])
+	}
+	if !seen["done"] || !seen["title"] {
+		return InvalidFieldErrorWithMessage([]string{"layout.columns"}, "Project view layout requires done and title columns")
+	}
+
+	if l.Group != nil {
+		if !projectViewLayoutGroupFields[l.Group.Field] {
+			return InvalidFieldErrorWithMessage([]string{"layout.group.field"}, "Unsupported project view group field")
+		}
+		if l.Group.Order == "" {
+			l.Group.Order = "asc"
+		}
+		if l.Group.Order != "asc" && l.Group.Order != "desc" {
+			return InvalidFieldErrorWithMessage([]string{"layout.group.order"}, "Project view group order must be asc or desc")
+		}
+	}
+
+	return nil
+}
+
 type ProjectView struct {
 	// The unique numeric id of this view
 	ID int64 `xorm:"autoincr not null unique pk" json:"id" param:"view" readOnly:"true" doc:"The unique, numeric id of this view. Set by the server."`
@@ -177,6 +274,8 @@ type ProjectView struct {
 	DefaultBucketID int64 `xorm:"bigint INDEX null" json:"default_bucket_id" doc:"The id of the bucket new tasks without a bucket are added to. Defaults to the leftmost bucket."`
 	// If tasks are moved to the done bucket, they are marked as done. If they are marked as done individually, they are moved into the done bucket.
 	DoneBucketID int64 `xorm:"bigint INDEX null" json:"done_bucket_id" doc:"The id of the done bucket. Tasks moved here are marked done, and tasks marked done are moved here."`
+	// Presentation settings for list and table views. A null layout preserves the legacy UI.
+	Layout *ProjectViewLayout `xorm:"json null default null" json:"layout,omitempty" doc:"Presentation settings for list and table views. A null value preserves the compact legacy layout."`
 
 	// A timestamp when this view was updated. You cannot change this value.
 	Updated time.Time `xorm:"updated not null" json:"updated" readOnly:"true" doc:"A timestamp when this view was last updated. You cannot change this value."`
@@ -347,12 +446,12 @@ func validateProjectViewFilters(p *ProjectView) (err error) {
 }
 
 func normalizeBucketConfigurationMode(p *ProjectView) {
-	if p.ViewKind != ProjectViewKindKanban {
+	if p.ViewKind != ProjectViewKindKanban && p.ViewKind != ProjectViewKindList {
 		p.BucketConfigurationMode = BucketConfigurationModeNone
 		return
 	}
 
-	if p.BucketConfigurationMode == BucketConfigurationModeNone {
+	if p.ViewKind == ProjectViewKindKanban && p.BucketConfigurationMode == BucketConfigurationModeNone {
 		p.BucketConfigurationMode = BucketConfigurationModeManual
 	}
 }
@@ -360,7 +459,7 @@ func normalizeBucketConfigurationMode(p *ProjectView) {
 // bucket_configuration_mode is optional in v1, so an omitted mode must keep the
 // stored one instead of converting a filter view to manual and mass-seeding it.
 func normalizeBucketConfigurationModeOnUpdate(p, oldView *ProjectView) {
-	if p.ViewKind == ProjectViewKindKanban &&
+	if (p.ViewKind == ProjectViewKindKanban || p.ViewKind == ProjectViewKindList) &&
 		p.BucketConfigurationMode == BucketConfigurationModeNone &&
 		oldView.ViewKind == ProjectViewKindKanban &&
 		oldView.BucketConfigurationMode != BucketConfigurationModeNone {
@@ -422,6 +521,9 @@ func bucketProjectViewID(s *xorm.Session, bucketID int64) (viewID int64, exists 
 
 func createProjectView(s *xorm.Session, p *ProjectView, a web.Auth, createBacklogBucket bool, addExistingTasksToView bool) (err error) {
 	normalizeBucketConfigurationMode(p)
+	if err = p.Layout.validateAndNormalize(); err != nil {
+		return err
+	}
 
 	err = validateProjectViewFilters(p)
 	if err != nil {
@@ -443,7 +545,7 @@ func createProjectView(s *xorm.Session, p *ProjectView, a web.Auth, createBacklo
 		return
 	}
 
-	if p.ViewKind == ProjectViewKindKanban && createBacklogBucket && p.BucketConfigurationMode == BucketConfigurationModeManual {
+	if createBacklogBucket && p.BucketConfigurationMode == BucketConfigurationModeManual {
 		err = createDefaultKanbanBuckets(s, a, p, addExistingTasksToView)
 		if err != nil {
 			return
@@ -489,7 +591,9 @@ func createDefaultKanbanBuckets(s *xorm.Session, a web.Auth, p *ProjectView, add
 	}
 
 	p.DefaultBucketID = backlog.ID
-	p.DoneBucketID = done.ID
+	if p.ViewKind == ProjectViewKindKanban {
+		p.DoneBucketID = done.ID
+	}
 	_, err = s.ID(p.ID).Cols("default_bucket_id", "done_bucket_id").Update(p)
 	if err != nil {
 		return
@@ -659,6 +763,9 @@ func (pv *ProjectView) Update(s *xorm.Session, a web.Auth) (err error) {
 	}
 
 	normalizeBucketConfigurationModeOnUpdate(pv, oldView)
+	if err = pv.Layout.validateAndNormalize(); err != nil {
+		return err
+	}
 
 	err = validateProjectViewFilters(pv)
 	if err != nil {
@@ -677,10 +784,11 @@ func (pv *ProjectView) Update(s *xorm.Session, a web.Auth) (err error) {
 		"position",
 		"bucket_configuration_mode",
 		"bucket_configuration",
+		"layout",
 	}
 	// A view without buckets has no business writing bucket ids - keeping the
 	// stored ones is what lets healBucketIDs restore them on the way back.
-	if pv.ViewKind == ProjectViewKindKanban {
+	if pv.ViewKind == ProjectViewKindKanban || (pv.ViewKind == ProjectViewKindList && pv.BucketConfigurationMode == BucketConfigurationModeManual) {
 		cols = append(cols, "default_bucket_id", "done_bucket_id")
 	}
 
@@ -692,17 +800,17 @@ func (pv *ProjectView) Update(s *xorm.Session, a web.Auth) (err error) {
 		return
 	}
 
-	return syncManualKanbanBuckets(s, a, pv, oldView)
+	return syncManualBuckets(s, a, pv, oldView)
 }
 
-func syncManualKanbanBuckets(s *xorm.Session, a web.Auth, pv, oldView *ProjectView) (err error) {
+func syncManualBuckets(s *xorm.Session, a web.Auth, pv, oldView *ProjectView) (err error) {
 	// Pseudo views like favorites only exist in memory, seeding would write
 	// buckets on a view id shared by every user.
-	becameManualKanban := pv.ID > 0 &&
-		pv.ViewKind == ProjectViewKindKanban &&
+	becameManualView := pv.ID > 0 &&
+		(pv.ViewKind == ProjectViewKindKanban || pv.ViewKind == ProjectViewKindList) &&
 		pv.BucketConfigurationMode == BucketConfigurationModeManual &&
-		(oldView.ViewKind != ProjectViewKindKanban || oldView.BucketConfigurationMode != BucketConfigurationModeManual)
-	if !becameManualKanban {
+		(oldView.ViewKind != pv.ViewKind || oldView.BucketConfigurationMode != BucketConfigurationModeManual)
+	if !becameManualView {
 		return
 	}
 

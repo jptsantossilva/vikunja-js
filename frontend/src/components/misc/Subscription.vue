@@ -6,7 +6,7 @@
 		:icon="iconName"
 		@click="emit('toggle', modelValue === null)"
 	>
-		{{ buttonText }}
+		<span v-if="!hideText">{{ buttonText }}</span>
 	</XButton>
 	<DropdownItem
 		v-else-if="type === 'dropdown'"
@@ -33,9 +33,11 @@ const props = withDefaults(defineProps<{
 	entity: NonNullable<Subscription['entity']>,
 	entityId: number,
 	type?: 'button' | 'dropdown',
+	hideText?: boolean,
 }>(), {
 	modelValue: null,
 	type: 'button',
+	hideText: false,
 })
 
 const emit = defineEmits<{

@@ -1332,6 +1332,7 @@ function setRelatedTasksActive() {
 	// simulate sass lighten($primary, 30) by increasing lightness 30% to 73%
 	--primary-light: hsla(var(--primary-h), var(--primary-s), 73%, var(--primary-a));
 	padding-block-end: 0;
+	background: var(--site-background);
 
 	@media screen and (min-width: $desktop) {
 		padding-block-end: 1rem;
@@ -1341,10 +1342,13 @@ function setRelatedTasksActive() {
 .task-view {
 	padding-block-start: 1rem;
 	padding-inline: .5rem;
-	background-color: var(--site-background);
+	background-color: var(--scheme-main);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
 
 	@media screen and (min-width: $desktop) {
-		padding: 1rem;
+		margin-inline: 1rem;
+		padding: 1.25rem 1.5rem;
+		border-radius: $radius;
 	}
 }
 
@@ -1352,7 +1356,7 @@ function setRelatedTasksActive() {
 	border-radius: $radius;
 	padding: 1rem;
 	color: var(--text);
-	background-color: var(--site-background) !important;
+	background-color: var(--scheme-main) !important;
 
 	@media screen and (width <= calc(#{$desktop} + 1px)) {
 		border-radius: 0;
@@ -1421,9 +1425,10 @@ h2 .button {
 }
 
 .details {
-	padding-block-end: 0.75rem;
+	padding-block-end: 1.25rem;
 	flex-flow: row wrap;
-	margin-block-end: 0;
+	margin-block-end: 1rem;
+	border-block-end: 1px solid var(--grey-200);
 
 	.detail-title {
 		display: block;
@@ -1495,7 +1500,9 @@ h2 .button {
 }
 
 .attachments {
-	margin-block-end: 0;
+	margin-block: 1.75rem;
+	padding-block-end: 1.5rem;
+	border-block-end: 1px solid var(--grey-200);
 
 	table tr:last-child td {
 		border-inline-end: none;
@@ -1503,6 +1510,11 @@ h2 .button {
 }
 
 .action-buttons {
+	max-inline-size: 17.5rem;
+	padding-inline-start: 1.25rem;
+	border-inline-start: 1px solid var(--grey-200);
+	font-size: .9rem;
+
 	@media screen and (min-width: $tablet) {
 		position: sticky;
 		inset-block-start: $navbar-height + 1.5rem;
@@ -1511,8 +1523,11 @@ h2 .button {
 
 	.button {
 		inline-size: 100%;
-		margin-block-end: .5rem;
+		margin-block-end: .25rem;
 		justify-content: left;
+		border: 0;
+		box-shadow: none;
+		font-weight: 400;
 
 		&.has-light-text {
 			color: var(--white);
@@ -1560,18 +1575,37 @@ h2 .button {
 }
 
 .detail-content {
+	> .content,
+	> :deep(.comments) {
+		margin-block-start: 1.75rem;
+		padding-block-end: 1.5rem;
+		border-block-end: 1px solid var(--grey-200);
+	}
+
 	@media print {
 		inline-size: 100% !important;
 	}
 }
 
 .action-heading {
-	text-transform: uppercase;
-	color: var(--grey-700);
+	color: var(--grey-500);
 	font-size: .75rem;
-	font-weight: 700;
-	margin: .5rem 0;
+	font-weight: 500;
+	margin: .75rem .5rem .25rem;
 	display: inline-block;
+}
+
+@media screen and (max-width: $tablet) {
+	.task-view {
+		box-shadow: none;
+	}
+
+	.action-buttons {
+		max-inline-size: none;
+		padding-inline-start: .75rem;
+		border-inline-start: 0;
+		border-block-start: 1px solid var(--grey-200);
+	}
 }
 
 .scroll-to-comments-button {

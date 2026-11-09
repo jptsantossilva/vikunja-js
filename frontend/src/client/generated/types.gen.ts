@@ -1887,6 +1887,10 @@ export type ProjectView = {
      */
     readonly id?: number;
     /**
+     * Presentation settings for list and table views. A null value preserves the compact legacy layout.
+     */
+    layout?: ProjectViewLayout;
+    /**
      * The position of this view in the project's list of views. Views are sorted ascending by this value.
      */
     position?: number;
@@ -1917,6 +1921,24 @@ export type ProjectViewBucketConfiguration = {
      * The title of the bucket this configuration creates.
      */
     title?: string;
+};
+
+export type ProjectViewLayout = {
+    columns?: Array<ProjectViewLayoutColumn> | null;
+    group?: ProjectViewLayoutGroup;
+    mode?: string;
+    version?: number;
+};
+
+export type ProjectViewLayoutColumn = {
+    field?: string;
+    width?: number;
+};
+
+export type ProjectViewLayoutGroup = {
+    field?: string;
+    order?: string;
+    show_empty?: boolean;
 };
 
 export type ProjectViewReadBody = {
@@ -1952,6 +1974,10 @@ export type ProjectViewReadBody = {
      * The unique, numeric id of this view. Set by the server.
      */
     readonly id?: number;
+    /**
+     * Presentation settings for list and table views. A null value preserves the compact legacy layout.
+     */
+    layout?: ProjectViewLayout;
     /**
      * The maximum permission the requesting user has on this view (0=read, 1=read/write, 2=admin).
      */
@@ -2579,6 +2605,17 @@ export type TaskDuplicate = {
      * The newly created duplicate task, populated by the server in the response.
      */
     readonly duplicated_task?: Task;
+};
+
+export type TaskHierarchyPosition = {
+    /**
+     * A URL to the JSON Schema for this object.
+     */
+    readonly $schema?: string;
+    parent_task_id?: number | null;
+    position?: number;
+    project_view_id?: number;
+    task_id?: number;
 };
 
 export type TaskPosition = {
@@ -4931,6 +4968,10 @@ export type ProjectViewWritable = {
      */
     filter?: TaskCollection;
     /**
+     * Presentation settings for list and table views. A null value preserves the compact legacy layout.
+     */
+    layout?: ProjectViewLayout;
+    /**
      * The position of this view in the project's list of views. Views are sorted ascending by this value.
      */
     position?: number;
@@ -4965,6 +5006,10 @@ export type ProjectViewReadBodyWritable = {
      * The filter query used to match tasks shown in this view. Combine conditions with && or || (not and/or) and group them with parentheses. Operators: =, !=, >, >=, <, <=, like, in, not in. See https://vikunja.io/docs/filters.
      */
     filter?: TaskCollection;
+    /**
+     * Presentation settings for list and table views. A null value preserves the compact legacy layout.
+     */
+    layout?: ProjectViewLayout;
     /**
      * The position of this view in the project's list of views. Views are sorted ascending by this value.
      */
@@ -5141,6 +5186,13 @@ export type TaskCommentReadBodyWritable = {
 
 export type TaskDuplicateWritable = {
     [key: string]: never;
+};
+
+export type TaskHierarchyPositionWritable = {
+    parent_task_id?: number | null;
+    position?: number;
+    project_view_id?: number;
+    task_id?: number;
 };
 
 export type TaskPositionWritable = {
@@ -9746,6 +9798,31 @@ export type TasksListResponses = {
 
 export type TasksListResponse = TasksListResponses[keyof TasksListResponses];
 
+export type TasksBulkDeleteData = {
+    body: BulkTaskWritable;
+    path?: never;
+    query?: never;
+    url: '/tasks/bulk';
+};
+
+export type TasksBulkDeleteErrors = {
+    /**
+     * Error
+     */
+    default: VikunjaErrorModel;
+};
+
+export type TasksBulkDeleteError = TasksBulkDeleteErrors[keyof TasksBulkDeleteErrors];
+
+export type TasksBulkDeleteResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type TasksBulkDeleteResponse = TasksBulkDeleteResponses[keyof TasksBulkDeleteResponses];
+
 export type TasksBulkUpdateData = {
     body: BulkTaskWritable;
     path?: never;
@@ -10609,6 +10686,36 @@ export type TasksDuplicateResponses = {
 };
 
 export type TasksDuplicateResponse = TasksDuplicateResponses[keyof TasksDuplicateResponses];
+
+export type TasksHierarchyPositionUpdateData = {
+    body: TaskHierarchyPositionWritable;
+    path: {
+        /**
+         * The numeric id of the task to move.
+         */
+        task: number;
+    };
+    query?: never;
+    url: '/tasks/{task}/hierarchy-position';
+};
+
+export type TasksHierarchyPositionUpdateErrors = {
+    /**
+     * Error
+     */
+    default: VikunjaErrorModel;
+};
+
+export type TasksHierarchyPositionUpdateError = TasksHierarchyPositionUpdateErrors[keyof TasksHierarchyPositionUpdateErrors];
+
+export type TasksHierarchyPositionUpdateResponses = {
+    /**
+     * OK
+     */
+    200: TaskHierarchyPosition;
+};
+
+export type TasksHierarchyPositionUpdateResponse = TasksHierarchyPositionUpdateResponses[keyof TasksHierarchyPositionUpdateResponses];
 
 export type TaskLabelsListData = {
     body?: never;

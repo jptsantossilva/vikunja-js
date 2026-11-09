@@ -29,3 +29,18 @@ export function shouldShowTaskInListView(
 	// Show task if parent is NOT in the current view (cross-project subtask)
 	return !hasParentInView
 }
+
+/**
+ * The compact list renders subtasks from the parent's relation data, so its
+ * top-level collection must omit children whose parent is already present.
+ * The grid builds a tree from the complete flat collection instead and must
+ * keep those children available.
+ */
+export function tasksForListPresentation(
+	tasks: TaskResponse[],
+	isGrid: boolean,
+): TaskResponse[] {
+	return isGrid
+		? tasks
+		: tasks.filter(task => shouldShowTaskInListView(task, tasks))
+}

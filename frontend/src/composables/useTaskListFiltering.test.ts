@@ -1,8 +1,21 @@
 import {describe, it, expect} from 'vitest'
-import {shouldShowTaskInListView} from './useTaskListFiltering'
+import {shouldShowTaskInListView, tasksForListPresentation} from './useTaskListFiltering'
 import {normalizeTask} from '@/client/queries/tasks'
 
 describe('shouldShowTaskInListView', () => {
+	it('keeps child rows for the grid tree but hides them from the compact top level', () => {
+		const parent = normalizeTask({id: 1, title: 'Parent'})
+		const child = normalizeTask({
+			id: 2,
+			title: 'Child',
+			related_tasks: {parenttask: [{id: 1, title: 'Parent'}]},
+		})
+		const tasks = [parent, child]
+
+		expect(tasksForListPresentation(tasks, true)).toBe(tasks)
+		expect(tasksForListPresentation(tasks, false)).toEqual([parent])
+	})
+
 	it('should hide subtasks when parent is in the same project', () => {
 		const parentTask = normalizeTask({
 			id: 1,

@@ -42,6 +42,28 @@ func RegisterBulkTaskRoutes(api huma.API) {
 		Path:        "/tasks/bulk",
 		Tags:        tags,
 	}, tasksBulkUpdate)
+
+	Register(api, huma.Operation{
+		OperationID: "tasks-bulk-delete",
+		Summary:     "Delete multiple tasks",
+		Description: "Deletes all selected tasks atomically after validating write access to every task.",
+		Method:      http.MethodDelete,
+		Path:        "/tasks/bulk",
+		Tags:        tags,
+	}, tasksBulkDelete)
+}
+
+func tasksBulkDelete(ctx context.Context, in *struct {
+	Body models.BulkTask
+}) (*emptyBody, error) {
+	a, err := authFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := handler.DoDelete(ctx, &in.Body, a); err != nil {
+		return nil, translateDomainError(err)
+	}
+	return &emptyBody{}, nil
 }
 
 func init() { AddRouteRegistrar(RegisterBulkTaskRoutes) }

@@ -1,5 +1,6 @@
 <template>
 	<XButton
+		class="project-view-control"
 		variant="secondary"
 		icon="filter"
 		:class="{'has-filters': hasFilters}"
@@ -112,6 +113,19 @@ const filterFromView = computed(() => {
 </script>
 
 <style scoped lang="scss">
+.project-view-control {
+	background: transparent;
+	box-shadow: none;
+	font-weight: 400;
+	text-transform: none;
+
+	&:hover,
+	&:focus-visible {
+		background: var(--grey-100);
+		box-shadow: none;
+	}
+}
+
 .filter-popup {
 	margin: 0;
 

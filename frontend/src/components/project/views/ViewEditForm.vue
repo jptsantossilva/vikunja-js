@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import {onBeforeMount, ref, watch} from 'vue'
 
-import type {ProjectView, ProjectViewWritable, TaskCollection} from '@/client/generated'
+import type {ProjectView, TaskCollection} from '@/client/generated'
 import type {EditableTaskCollection} from '@/types/EditableTaskCollection'
 import {
 	createProjectViewDraft,
 	createProjectViewUpdate,
 	type ProjectViewDraft,
+	type ProjectViewWritableWithLayout,
 } from '@/client/queries/projectViews'
+import {createDefaultProjectViewLayout, normalizeProjectViewLayout} from '@/helpers/projectViewLayout'
+import type {NormalizedProjectViewLayout} from '@/types/ProjectViewLayout'
 
 import {hasFilterQuery, transformFilterStringForApi, transformFilterStringFromApi} from '@/helpers/filters'
 import {useLabels} from '@/composables/useLabels'
@@ -33,7 +36,7 @@ const emit = defineEmits<{
 	'cancel': [],
 }>()
 
-type ProjectViewFormValue = ProjectViewWritable & Pick<ProjectView, 'id' | 'project_id'>
+type ProjectViewFormValue = ProjectViewWritableWithLayout & Pick<ProjectView, 'id' | 'project_id'>
 type LoadedProjectView = Omit<ProjectViewDraft, 'filter' | 'bucket_configuration'> &
 	Pick<ProjectView, 'id' | 'project_id'> & {
 		filter: EditableTaskCollection
@@ -86,6 +89,7 @@ function transformViewFromApi(modelValue: ProjectViewFormValue): LoadedProjectVi
 			title: bucket.title ?? '',
 			filter: transformFilterFromApi(bucket.filter),
 		})),
+		layout: normalizeProjectViewLayout(modelValue.layout),
 	}
 }
 
@@ -186,6 +190,14 @@ function save() {
 	})
 }
 
+function setListLayoutMode(mode: NormalizedProjectViewLayout['mode']) {
+	const normalized = normalizeProjectViewLayout(view.value.layout) || createDefaultProjectViewLayout(mode)
+	view.value.layout = {...normalized, mode}
+	if (mode === 'grid' && view.value.bucket_configuration_mode === 'none') {
+		view.value.bucket_configuration_mode = 'manual'
+	}
+}
+
 const titleValid = ref(true)
 
 function validateTitle() {
@@ -241,6 +253,36 @@ function handleBubbleSave(event: FocusEvent) {
 			</template>
 		</FormField>
 
+		<div
+			v-if="view.view_kind === 'list'"
+			class="field"
+		>
+			<label class="label">{{ $t('project.views.layoutMode') }}</label>
+			<div class="control">
+				<label class="radio">
+					<input
+						:checked="!view.layout || view.layout.mode === 'compact'"
+						type="radio"
+						name="layoutMode"
+						@change="setListLayoutMode('compact')"
+					>
+					{{ $t('project.views.layoutCompact') }}
+				</label>
+				<label class="radio">
+					<input
+						:checked="view.layout?.mode === 'grid'"
+						type="radio"
+						name="layoutMode"
+						@change="setListLayoutMode('grid')"
+					>
+					{{ $t('project.views.layoutGrid') }}
+				</label>
+			</div>
+			<p class="help">
+				{{ $t('project.views.layoutModeHint') }}
+			</p>
+		</div>
+
 		<label
 			class="label"
 			for="filter"
@@ -267,7 +309,7 @@ function handleBubbleSave(event: FocusEvent) {
 		</div>
 
 		<div
-			v-if="view.view_kind === 'kanban'"
+			v-if="view.view_kind === 'kanban' || view.view_kind === 'list'"
 			class="field"
 		>
 			<label
@@ -302,7 +344,7 @@ function handleBubbleSave(event: FocusEvent) {
 		</div>
 
 		<div
-			v-if="view.view_kind === 'kanban' && view.bucket_configuration_mode === 'filter'"
+			v-if="(view.view_kind === 'kanban' || view.view_kind === 'list') && view.bucket_configuration_mode === 'filter'"
 			class="field"
 		>
 			<label class="label">

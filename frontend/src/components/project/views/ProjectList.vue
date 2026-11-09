@@ -7,6 +7,20 @@
 	>
 		<template #header>
 			<div class="filter-container">
+				<XButton
+					v-if="isGrid && layoutDraft.dirty.value && canAdmin"
+					:loading="saveViewMutation.isPending.value"
+					@click="saveGridLayout"
+				>
+					{{ $t('project.list.saveView') }}
+				</XButton>
+				<XButton
+					v-if="isGrid && layoutDraft.dirty.value"
+					variant="secondary"
+					@click="layoutDraft.reset"
+				>
+					{{ $t('project.list.resetView') }}
+				</XButton>
 				<SortPopup
 					v-model="sortByParam"
 				/>
@@ -22,8 +36,8 @@
 
 		<template #default>
 			<div
-				:class="{ 'is-loading': showLoading }"
-				class="loader-container is-max-width-desktop list-view"
+				class="loader-container list-view"
+				:class="{'is-loading': showLoading, 'is-max-width-desktop': !isGrid, 'is-grid': isGrid}"
 			>
 				<Card
 					:padding="false"
@@ -47,8 +61,28 @@
 						</ButtonLink>
 					</Nothing>
 
+					<TaskGrid
+						v-if="isGrid && tasks.length > 0"
+						:layout="layoutDraft.layout.value"
+						:tasks
+						:sections="gridSections"
+						:can-write="canWrite"
+						:can-reorder="canWrite && isPositionSorting && !gridSections"
+						:sort-by-position="isPositionSorting"
+						:view-id
+						:collapsed-sections="collapsedSections"
+						@update:layout="layoutDraft.update"
+						@updated="refreshGrid"
+						@deleted="refreshGrid"
+						@hierarchyMoved="refreshGrid"
+						@toggleSection="toggleSection"
+						@renameSection="renameSection"
+						@deleteSection="deleteSection"
+						@tasksAddedToSection="moveNewTasksToSection"
+					/>
+
 					<draggable
-						v-if="tasks && tasks.length > 0"
+						v-else-if="tasks && tasks.length > 0"
 						v-model="tasks"
 						:group="{name: 'tasks', put: false}"
 						:disabled="!canDragTasks || !isPositionSorting"
@@ -100,7 +134,11 @@
 
 
 <script setup lang="ts">
-import {useUpdateTaskPositionMutation} from '@/client/queries/taskMutations'
+import {useMoveTaskMutation, useUpdateTaskPositionMutation} from '@/client/queries/taskMutations'
+import {useDeleteBucketMutation, useUpdateBucketMutation} from '@/client/queries/kanbanMutations'
+import {bucketsQuery} from '@/client/queries/kanban'
+import {useUpdateProjectViewMutation} from '@/client/queries/projectViews'
+import {useQuery} from '@tanstack/vue-query'
 import {ref, computed, nextTick, onMounted, onBeforeUnmount, watch, toRef} from 'vue'
 import {draggableFor} from '@/components/base/Draggable'
 
@@ -112,16 +150,22 @@ import FilterPopup from '@/components/project/partials/FilterPopup.vue'
 import Nothing from '@/components/misc/Nothing.vue'
 import Pagination from '@/components/misc/Pagination.vue'
 import SortPopup from '@/components/project/partials/SortPopup.vue'
+import TaskGrid from '@/components/tasks/grid/TaskGrid.vue'
+import XButton from '@/components/input/Button.vue'
 
 import {useTaskList} from '@/composables/useTaskList'
 import {useTaskDragToProject} from '@/composables/useTaskDragToProject'
 import {useCurrentProject} from '@/composables/useCurrentProject'
-import {shouldShowTaskInListView} from '@/composables/useTaskListFiltering'
+import {tasksForListPresentation} from '@/composables/useTaskListFiltering'
 import {PERMISSIONS as Permissions} from '@/constants/permissions'
 import {eventToShortcutString} from '@/helpers/shortcut'
 import {calculateItemPosition} from '@/helpers/calculateItemPosition'
 import type {TaskResponse} from '@/client/queries/tasks'
 import {isSavedFilterProject} from '@/client/queries/projects'
+import type {ProjectView, ProjectViewWritable, Task} from '@/client/generated'
+import type {ProjectViewLayout} from '@/types/ProjectViewLayout'
+import {useProjectViewLayoutDraft} from '@/composables/useProjectViewLayoutDraft'
+import {getCollapsedBucketState, saveCollapsedBucketState, type CollapsedBuckets} from '@/helpers/saveCollapsedBucketState'
 
 import {useBaseStore} from '@/stores/base'
 import {useTaskDragState} from '@/composables/useTaskDragState'
@@ -165,24 +209,123 @@ const showLoading = useDelayedLoading(loading)
 const positionMutation = useUpdateTaskPositionMutation()
 
 const dragTasks = ref<TaskResponse[] | null>(null)
-const tasks = computed({
-	get: () => dragTasks.value ?? allTasks.value.filter(task => shouldShowTaskInListView(task, allTasks.value)),
-	set: value => { dragTasks.value = value },
-})
-watch([projectId, () => props.viewId], () => { dragTasks.value = null })
-
 const isPositionSorting = computed(() => 'position' in sortByParam.value)
 
 const baseStore = useBaseStore()
 const {setDraggedTask} = useTaskDragState()
 const {handleTaskDropToProject} = useTaskDragToProject()
 const {currentProject: project} = useCurrentProject()
+const currentView = computed(() => project.value?.views?.find(view => view.id === props.viewId))
+const serverLayout = computed(() => (currentView.value as (ProjectView & {layout?: ProjectViewLayout}) | undefined)?.layout)
+const layoutDraft = useProjectViewLayoutDraft(
+	projectId,
+	() => props.viewId,
+	serverLayout,
+	() => currentView.value?.updated,
+)
+const isGrid = computed(() => layoutDraft.layout.value.mode === 'grid')
+
+const tasks = computed({
+	get: () => dragTasks.value ?? tasksForListPresentation(allTasks.value, isGrid.value),
+	set: value => { dragTasks.value = value },
+})
+watch([projectId, () => props.viewId], () => { dragTasks.value = null })
 
 const canWrite = computed(() => {
 	return typeof project.value?.max_permission === 'number' &&
 		project.value.max_permission > Permissions.READ &&
 		project.value.id > 0
 })
+const canAdmin = computed(() => (project.value?.max_permission ?? Permissions.READ) >= Permissions.ADMIN)
+
+const bucketQuery = useQuery(computed(() => ({
+	...bucketsQuery(projectId.value, props.viewId),
+	enabled: isGrid.value && currentView.value?.bucket_configuration_mode === 'manual',
+})))
+
+const gridSections = computed(() => {
+	if (layoutDraft.layout.value.group?.field !== 'section' || currentView.value?.bucket_configuration_mode !== 'manual') {
+		return undefined
+	}
+	return (bucketQuery.data.value ?? [])
+		.filter(bucket => bucket.id !== undefined)
+		.map(bucket => ({
+			id: bucket.id!,
+			title: bucket.title ?? '',
+			count: bucket.count ?? tasks.value.filter(task => task.bucket_id === bucket.id).length,
+			tasks: tasks.value.filter(task => task.bucket_id === bucket.id),
+		}))
+})
+
+const collapsedSections = ref<CollapsedBuckets>({})
+watch(
+	[projectId, () => props.viewId],
+	([nextProjectId, nextViewId]) => {
+		collapsedSections.value = getCollapsedBucketState(nextProjectId, nextViewId)
+	},
+	{immediate: true},
+)
+
+const saveViewMutation = useUpdateProjectViewMutation()
+const moveTaskMutation = useMoveTaskMutation()
+const updateBucketMutation = useUpdateBucketMutation()
+const deleteBucketMutation = useDeleteBucketMutation()
+
+async function saveGridLayout() {
+	if (!currentView.value?.id || !canAdmin.value || layoutDraft.serverConflict.value) return
+	const layout = layoutDraft.layout.value
+	const updated = await saveViewMutation.mutateAsync({
+		projectId: projectId.value,
+		viewId: currentView.value.id,
+		view: {layout} as ProjectViewWritable,
+	})
+	layoutDraft.markSaved(layout, updated.updated)
+}
+
+function toggleSection(sectionId: number) {
+	collapsedSections.value = {
+		...collapsedSections.value,
+		[sectionId]: !collapsedSections.value[sectionId],
+	}
+	saveCollapsedBucketState(projectId.value, collapsedSections.value, props.viewId)
+}
+
+async function renameSection(sectionId: number, title: string) {
+	const bucket = (bucketQuery.data.value ?? []).find(item => item.id === sectionId)
+	if (!bucket) return
+	await updateBucketMutation.mutateAsync({
+		project: projectId.value,
+		view: props.viewId,
+		bucket: {
+			id: sectionId,
+			title,
+			limit: bucket.limit ?? 0,
+			position: bucket.position ?? 0,
+		},
+	})
+}
+
+async function deleteSection(sectionId: number) {
+	await deleteBucketMutation.mutateAsync({project: projectId.value, view: props.viewId, bucket: sectionId})
+	await refreshGrid()
+}
+
+async function moveNewTasksToSection(newTasks: Task[], sectionId: number) {
+	for (const task of newTasks) {
+		if (task.id === undefined) continue
+		await moveTaskMutation.mutateAsync({
+			project: projectId.value,
+			view: props.viewId,
+			bucket: sectionId,
+			task,
+		})
+	}
+	await refreshGrid()
+}
+
+async function refreshGrid() {
+	await Promise.all([loadTasks(), bucketQuery.refetch()])
+}
 
 const isPseudoProject = computed(() => isSavedFilterProject(project.value) || project.value?.id === -1)
 
@@ -207,6 +350,7 @@ function focusNewTaskInput() {
 
 function updateTaskList() {
 	baseStore.setHasTasks(true)
+	if (isGrid.value) void refreshGrid()
 }
 
 function updateTasks() {
@@ -408,5 +552,11 @@ onBeforeUnmount(() => {
 	:deep(.card) {
 		margin-block-end: 0;
 	}
+}
+
+.list-view.is-grid {
+	inline-size: 100%;
+	max-inline-size: none;
+	padding-inline: 1rem;
 }
 </style>
