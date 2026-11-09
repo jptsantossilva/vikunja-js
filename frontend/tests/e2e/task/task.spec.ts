@@ -821,7 +821,7 @@ test.describe('Task', () => {
 			await page.goto(`/tasks/${tasks[0].id}`)
 			await page.waitForLoadState('networkidle')
 
-			const dueDateColumn = page.locator('.task-view .columns.details .column').filter({hasText: 'Due Date'})
+			const dueDateColumn = page.locator('[data-cy="taskDetail.dueDate"]')
 			await expect(dueDateColumn).not.toBeVisible()
 			await page.locator('.task-view .action-buttons').click()
 			await page.locator('body').press('d')

@@ -1207,10 +1207,6 @@
       "title": "Task detail",
       "markAsDone": "Mark '{task}' as done",
       "scrollToBottom": "Scroll to bottom",
-      "advanced": "Advanced properties",
-      "showAdvanced": "Show advanced properties",
-      "hideAdvanced": "Hide advanced properties",
-      "linkCopied": "The task link was copied.",
       "organization": "Organization",
       "management": "Management",
       "dateAndTime": "Date and time",
@@ -1232,8 +1228,7 @@
         "color": "Set Color",
         "delete": "Delete",
         "favorite": "Add to Favorites",
-        "unfavorite": "Remove from Favorites",
-        "copyLink": "Copy link"
+        "unfavorite": "Remove from Favorites"
       }
     },
     "attributes": {
@@ -1357,7 +1352,6 @@
     "relation": {
       "add": "Add a New Task Relation",
       "new": "New Task Relation",
-      "addSubtask": "Add subtask",
       "searchPlaceholder": "Type search for a task to add as related…",
       "createPlaceholder": "Add this as related task",
       "differentProject": "This task belongs to a different project.",

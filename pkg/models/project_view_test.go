@@ -387,7 +387,7 @@ func TestProjectView_Update(t *testing.T) {
 		require.ErrorContains(t, err, "nonexistingfield")
 	})
 
-	t.Run("switch kanban view to list resets bucket configuration mode", func(t *testing.T) {
+	t.Run("switch kanban view to list preserves manual bucket configuration", func(t *testing.T) {
 		db.LoadAndAssertFixtures(t)
 		s := db.NewSession()
 		defer s.Close()
@@ -406,7 +406,7 @@ func TestProjectView_Update(t *testing.T) {
 		db.AssertExists(t, "project_views", map[string]interface{}{
 			"id":                        4,
 			"view_kind":                 ProjectViewKindList,
-			"bucket_configuration_mode": BucketConfigurationModeNone,
+			"bucket_configuration_mode": BucketConfigurationModeManual,
 		}, false)
 	})
 

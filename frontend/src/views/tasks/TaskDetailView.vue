@@ -143,6 +143,7 @@
 							<div
 								v-if="activeFields.dueDate"
 								class="column"
+								data-cy="taskDetail.dueDate"
 							>
 								<!-- Due Date -->
 								<div class="detail-title">

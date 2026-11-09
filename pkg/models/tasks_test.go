@@ -226,11 +226,11 @@ func TestTask_Create(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, s.Commit())
 
-		// Task should be assigned to default bucket of the list view with manual buckets (view 161, bucket 41)
+		// Task should be assigned to default bucket of the list view with manual buckets (view 162, bucket 41)
 		db.AssertExists(t, "task_buckets", map[string]interface{}{
 			"task_id":         task.ID,
 			"bucket_id":       41,
-			"project_view_id": 161,
+			"project_view_id": 162,
 		}, false)
 		// Task should also still be assigned to the kanban view's default bucket
 		db.AssertExists(t, "task_buckets", map[string]interface{}{
