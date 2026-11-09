@@ -33,7 +33,8 @@ import (
 // basePath carries the literal {project} and idParam picks {view}.
 //
 // Fixtures (see pkg/db/fixtures): project 1 (owned by testuser1) has the four
-// default views 1-4 plus the filtered view 161 (five total); project 2 (owned
+// default views 1-4, the filtered view 161, and the sectioned list view 162
+// (six total); project 2 (owned
 // by user3, no share to testuser1) has views 5-8 — used for the forbidden and
 // wrong-parent negatives.
 //
@@ -102,8 +103,9 @@ func TestProjectView(t *testing.T) {
 			assert.Contains(t, rec.Body.String(), `"project_id":1`)
 			assert.NotContains(t, rec.Body.String(), `"project_id":2`)
 
-			// Exact cardinality: project 1 has five views in the fixtures (the
-			// four defaults 1-4 plus the filtered view 161). The list must
+			// Exact cardinality: project 1 has six views in the fixtures (the
+			// four defaults 1-4, the filtered view 161, and the sectioned list
+			// view 162). The list must
 			// surface every one of them and nothing else.
 			var env struct {
 				Items []struct {
@@ -114,14 +116,14 @@ func TestProjectView(t *testing.T) {
 				Total int64 `json:"total"`
 			}
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &env))
-			assert.Len(t, env.Items, 5)
-			assert.Equal(t, int64(5), env.Total)
+			assert.Len(t, env.Items, 6)
+			assert.Equal(t, int64(6), env.Total)
 			ids := make([]int64, 0, len(env.Items))
 			for _, v := range env.Items {
 				assert.Equal(t, int64(1), v.ProjectID, "every returned view must belong to project 1")
 				ids = append(ids, v.ID)
 			}
-			assert.ElementsMatch(t, []int64{1, 2, 3, 4, 161}, ids)
+			assert.ElementsMatch(t, []int64{1, 2, 3, 4, 161, 162}, ids)
 		})
 		t.Run("Read-only share can list", func(t *testing.T) {
 			// CanRead delegates to Project.CanRead; a read share is enough.
