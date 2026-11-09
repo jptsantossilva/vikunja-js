@@ -823,8 +823,7 @@ test.describe('Task', () => {
 
 			const dueDateColumn = page.locator('[data-cy="taskDetail.dueDate"]')
 			await expect(dueDateColumn).not.toBeVisible()
-			await page.locator('.task-view .action-buttons').click()
-			await page.locator('body').press('d')
+			await page.locator('.task-view').press('d')
 			await expect(dueDateColumn).toBeVisible()
 
 			const popup = dueDateColumn.locator('.datepicker .datepicker-popup')
