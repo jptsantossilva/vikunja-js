@@ -34,6 +34,11 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set release version
+        id: release-version
+        shell: bash
+        run: echo "version=$(date -u +'%y.%m.%d')" >> "$GITHUB_OUTPUT"
+
       - name: Container metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -52,4 +57,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            RELEASE_VERSION=main-${{ github.sha }}
+            RELEASE_VERSION=${{ steps.release-version.outputs.version }}

@@ -7,6 +7,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 All releases can be found on https://code.vikunja.io/vikunja/releases.
 
+## [Unreleased]
+
+### Other
+
+* *(ci)* Use date-based versions for published containers
+
 ## [2.8.0] - 2026-11-05
 
 ### Bug Fixes
