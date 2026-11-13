@@ -95,27 +95,10 @@ function updateDate(value: string) {
 <template>
 	<div
 		class="task-grid-cell"
-		:class="[`task-grid-cell--${field}`, {'is-saving': saving}]"
+		:class="[`task-grid-cell--${field}`, {'is-saving': saving, 'is-root-title': field === 'title' && !depth}]"
 		role="gridcell"
 	>
-		<button
-			v-if="field === 'done'"
-			type="button"
-			class="task-grid-cell__done-toggle"
-			:class="{'is-done': task.done}"
-			:disabled="!canWrite || saving"
-			:aria-label="task.done ? $t('project.list.reopen') : $t('project.list.markDone')"
-			@click.stop="updateTask({done: !task.done})"
-		>
-			<Icon icon="check" />
-		</button>
-
-		<template v-else-if="field === 'title'">
-			<span
-				v-if="depth"
-				class="task-grid-cell__indent"
-				:style="{'--task-depth': depth}"
-			/>
+		<template v-if="field === 'title'">
 			<button
 				v-if="hasChildren"
 				type="button"
@@ -125,6 +108,16 @@ function updateDate(value: string) {
 				@click.stop="emit('toggle')"
 			>
 				<Icon icon="chevron-down" />
+			</button>
+			<button
+				type="button"
+				class="task-grid-cell__done-toggle"
+				:class="{'is-done': task.done}"
+				:aria-disabled="!canWrite || saving"
+				:aria-label="task.done ? $t('project.list.reopen') : $t('project.list.markDone')"
+				@click.stop="updateTask({done: !task.done})"
+			>
+				<Icon icon="check" />
 			</button>
 			<input
 				v-if="editingTitle"
@@ -241,24 +234,19 @@ function updateDate(value: string) {
 	}
 }
 
-.task-grid-cell--done {
-	justify-content: center;
-	position: sticky;
-	inset-inline-start: calc(var(--task-grid-selection-width, 0) + var(--task-grid-row-number-width, 0));
-	z-index: 2;
-	border-inline-end: 0;
-	background: inherit;
-}
-
 .task-grid-cell--title {
+	display: grid;
+	grid-template-columns: 1.25rem 1.125rem minmax(0, 1fr) auto;
 	position: sticky;
-	inset-inline-start: calc(var(--task-grid-selection-width, 0) + var(--task-grid-row-number-width, 0) + 48px);
+	inset-inline-start: var(--task-grid-title-start, 112px);
 	z-index: 2;
+	padding-inline-start: calc(.5rem + var(--task-indent, 0px));
 	background: inherit;
 }
 
 .task-grid-cell__done-toggle {
 	display: inline-flex;
+	grid-column: 2;
 	align-items: center;
 	justify-content: center;
 	inline-size: 1.125rem;
@@ -294,15 +282,14 @@ function updateDate(value: string) {
 			opacity: 1;
 		}
 	}
-}
 
-.task-grid-cell__indent {
-	flex: 0 0 calc(var(--task-depth) * 1.25rem);
+	&[aria-disabled='true'] {
+		cursor: default;
+	}
 }
 
 .task-grid-cell__subtask-toggle {
 	display: inline-flex;
-	flex: 0 0 1.25rem;
 	align-items: center;
 	justify-content: center;
 	inline-size: 1.25rem;
@@ -320,7 +307,6 @@ function updateDate(value: string) {
 }
 
 .task-grid-cell__title {
-	flex: 1;
 	min-inline-size: 0;
 	padding: .25rem .375rem;
 	border: 1px solid transparent;
@@ -333,6 +319,16 @@ function updateDate(value: string) {
 	text-overflow: ellipsis;
 	cursor: text;
 	transition: border-color $transition, background-color $transition;
+}
+
+.task-grid-cell__title,
+.task-grid-cell__title-input {
+	grid-column: 3;
+}
+
+.is-root-title .task-grid-cell__title,
+.is-root-title .task-grid-cell__title-input {
+	font-weight: 600;
 }
 
 .task-grid-cell--title:hover .task-grid-cell__title:not(:disabled),

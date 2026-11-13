@@ -82,10 +82,18 @@ const columnLabels: Record<ProjectViewLayoutColumnField, string> = {
 	created_by: 'task.attributes.createdBy',
 }
 
+const visibleColumns = computed(() => props.layout.columns.filter(column => column.field !== 'done'))
+const columnOptions = Object.values(TASK_GRID_COLUMNS).filter(column => column.field !== 'done')
+// Keep the saved widths of both columns now that the completion button sits next to the title.
+const completionColumnWidth = computed(() =>
+	props.layout.columns.find(column => column.field === 'done')?.width ?? TASK_GRID_COLUMNS.done.defaultWidth,
+)
 const gridTemplateColumns = computed(() => [
 	'40px',
 	'72px',
-	...props.layout.columns.map(column => `${column.width}px`),
+	...visibleColumns.value.map(column => column.field === 'title'
+		? `${column.width + completionColumnWidth.value}px`
+		: `${column.width}px`),
 ].join(' '))
 
 function orderTasks(tasks: TaskResponse[]): TaskResponse[] {
@@ -350,8 +358,6 @@ function dropLabel(task: TaskResponse): string {
 		class="task-grid"
 		:style="{
 			'--task-grid-columns': gridTemplateColumns,
-			'--task-grid-selection-width': '40px',
-			'--task-grid-row-number-width': '72px',
 		}"
 		role="treegrid"
 		:aria-multiselectable="canWrite"
@@ -377,7 +383,7 @@ function dropLabel(task: TaskResponse): string {
 				<template #content>
 					<div class="task-grid__column-picker">
 						<div
-							v-for="definition in TASK_GRID_COLUMNS"
+							v-for="definition in columnOptions"
 							:key="definition.field"
 							class="task-grid__column-option"
 						>
@@ -496,15 +502,13 @@ function dropLabel(task: TaskResponse): string {
 				#
 			</div>
 			<div
-				v-for="column in layout.columns"
+				v-for="column in visibleColumns"
 				:key="column.field"
 				class="task-grid__heading"
 				:class="[`task-grid__heading--${column.field}`]"
 				role="columnheader"
 			>
-				<span :class="{'is-sr-only': column.field === 'done'}">
-					{{ $t(columnLabels[column.field]) }}
-				</span>
+				{{ $t(columnLabels[column.field]) }}
 				<button
 					class="task-grid__resize"
 					:aria-label="$t('project.list.resizeColumn', {column: $t(columnLabels[column.field])})"
@@ -560,6 +564,7 @@ function dropLabel(task: TaskResponse): string {
 							'is-drop-invalid': invalidDropTargetId === row.task.id,
 						},
 					]"
+					:style="{'--task-depth': row.depth}"
 					role="row"
 					:aria-level="row.depth + 1"
 					:aria-expanded="row.hasChildren ? !collapsedTasks.has(row.task.id) : undefined"
@@ -602,10 +607,10 @@ function dropLabel(task: TaskResponse): string {
 						>
 							<Icon icon="grip-lines" />
 						</button>
-						<span>{{ row.rowNumber }}</span>
+						<span class="task-grid__row-number-value">{{ row.rowNumber }}</span>
 					</div>
 					<TaskGridCell
-						v-for="column in layout.columns"
+						v-for="column in visibleColumns"
 						:key="column.field"
 						:task="row.task"
 						:field="column.field"
@@ -638,6 +643,8 @@ function dropLabel(task: TaskResponse): string {
 
 <style scoped lang="scss">
 .task-grid {
+	--task-grid-title-start: 112px;
+
 	overflow: auto;
 	position: relative;
 }
@@ -752,7 +759,6 @@ function dropLabel(task: TaskResponse): string {
 	border-inline-end: 1px solid var(--grey-200);
 }
 
-.task-grid__heading--done,
 .task-grid__heading--title,
 .task-grid__selection,
 .task-grid__row-number {
@@ -780,13 +786,23 @@ function dropLabel(task: TaskResponse): string {
 }
 
 .task-grid__row-number--header {
-	justify-content: center;
+	justify-content: end;
 	font-size: .8rem;
 	font-weight: 600;
 }
 
+.task-grid__row-number-value {
+	flex: 1;
+	min-inline-size: 0;
+	margin-inline-end: calc(-1 * var(--task-indent));
+	text-align: end;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 .task-grid__drag-handle {
 	display: inline-flex;
+	flex-shrink: 0;
 	align-items: center;
 	justify-content: center;
 	inline-size: 1.5rem;
@@ -810,13 +826,9 @@ function dropLabel(task: TaskResponse): string {
 	opacity: 1;
 }
 
-.task-grid__heading--done {
-	border-inline-end: 0;
-	inset-inline-start: 112px;
-}
-
 .task-grid__heading--title {
-	inset-inline-start: 160px;
+	inset-inline-start: var(--task-grid-title-start);
+	padding-inline-start: 4rem;
 }
 
 .task-grid__resize {
@@ -859,6 +871,8 @@ function dropLabel(task: TaskResponse): string {
 }
 
 .task-grid__row {
+	--task-indent: min(var(--task-depth) * 2rem, 7rem);
+
 	position: relative;
 	border-block-end: 1px solid var(--grey-100);
 	background: var(--white);
@@ -954,7 +968,7 @@ function dropLabel(task: TaskResponse): string {
 @media (max-width: $tablet) {
 	.task-grid__header,
 	.task-grid__row {
-		grid-template-columns: 40px 72px 48px minmax(240px, 1fr) 120px 120px;
+		grid-template-columns: 40px 72px minmax(288px, 1fr) 120px 120px;
 		min-inline-size: 672px;
 	}
 
@@ -963,15 +977,16 @@ function dropLabel(task: TaskResponse): string {
 		display: none;
 	}
 
-	.task-grid__heading--done,
 	.task-grid__heading--title,
 	.task-grid__heading--assignees,
 	.task-grid__heading--due_date,
-	.task-grid-cell--done,
-	.task-grid-cell--title,
 	.task-grid-cell--assignees,
 	.task-grid-cell--due_date {
 		display: flex;
+	}
+
+	.task-grid-cell--title {
+		display: grid;
 	}
 }
 

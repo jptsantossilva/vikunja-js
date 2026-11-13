@@ -9,6 +9,10 @@ All releases can be found on https://code.vikunja.io/vikunja/releases.
 
 ## [Unreleased]
 
+### Improvements
+
+* *(frontend)* Improve task hierarchy visibility in the grid with indented numbers and completion buttons and emphasized root tasks
+
 ### Other
 
 * *(ci)* Use date-based versions for published containers

@@ -89,7 +89,7 @@ describe('TaskGridCell subtask toggle', () => {
 		const wrapper = mount(TaskGridCell, {
 			props: {
 				task: parentTask,
-				field: 'done',
+				field: 'title',
 				canWrite: true,
 			},
 			global: {
