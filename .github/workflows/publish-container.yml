@@ -37,7 +37,9 @@ jobs:
       - name: Set release version
         id: release-version
         shell: bash
-        run: echo "version=$(date -u +'%y.%m.%d')" >> "$GITHUB_OUTPUT"
+        run: |
+          IFS=. read -r year month day <<< "$(date -u +'%y.%m.%d')"
+          echo "version=$((10#$year)).$((10#$month)).$((10#$day))" >> "$GITHUB_OUTPUT"
 
       - name: Container metadata
         id: meta

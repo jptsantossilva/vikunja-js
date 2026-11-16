@@ -39,27 +39,42 @@ devenv shell
 Or install manually:
 - Go (see go.mod for version)
 - Node.js >= 24
-- pnpm 10.x
+- pnpm (see `frontend/package.json` for the required version)
 - [Mage](https://magefile.org/) (Go build tool)
 - golangci-lint
 
 ### Running Locally
 
-```bash
-# Backend
-mage build
+From the repository root, start both servers with:
 
-# Frontend
+```bash
+./dev.sh
+```
+
+The script checks the required tools, installs frontend dependencies if missing, builds the backend, and starts both servers. Open http://127.0.0.1:4173 and press Ctrl+C in the terminal to stop them. Stop any existing Vikunja servers first to free ports 3456 and 4173. Changes to Go code require restarting the script; the frontend reloads automatically.
+
+Alternatively, run the servers in separate terminals:
+
+From the repository root, build and start the backend:
+
+```bash
+mage build
+VIKUNJA_SERVICE_PUBLICURL=http://127.0.0.1:4173/ ./vikunja web
+```
+
+The API listens on port 3456 by default and uses SQLite unless configured otherwise. `mage build` only builds the binary; rerun it and restart the backend after changing Go code.
+
+In a second terminal, start the frontend development server:
+
+```bash
 cd frontend
 pnpm install
-pnpm dev
+DEV_PROXY=http://127.0.0.1:3456 pnpm dev
 ```
 
-The frontend dev server runs on port 4173. You can point it at any backend (including the demo instance) by creating `frontend/.env.local`:
+Open http://127.0.0.1:4173. The frontend proxies `/api` requests to the backend. You can set `DEV_PROXY` to another backend, including the demo instance, or put it in `frontend/.env.local` (see `frontend/.env.local.example`). Set `VIKUNJA_FRONTEND_PORT` or pass `--port` to change the frontend port; update `VIKUNJA_SERVICE_PUBLICURL` to match.
 
-```
-VITE_API_URL=http://localhost:3456/api/v1
-```
+If a command is not found, check that the prerequisites are installed and available on your `PATH` (or enter `devenv shell`). For a manual setup with Corepack, enable pnpm with `corepack enable` after selecting a supported Node.js version. After installing Go, install Mage with `go install github.com/magefile/mage@v1.17.2` and add `$(go env GOPATH)/bin` to your `PATH`. Run `cd frontend` only when starting from the repository root.
 
 ### Running Tests
 

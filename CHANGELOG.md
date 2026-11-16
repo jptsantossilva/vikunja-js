@@ -2,12 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
-to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Releases use
+date-based version numbers in the format `YY.M.D`, without leading zeroes in the month or day.
 
 All releases can be found on https://code.vikunja.io/vikunja/releases.
 
 ## [Unreleased]
+
+## [26.11.16] - 2026-11-16
+
+### Features
+
+* *(admin)* Add a team directory and project sharing controls to the administration panel
+* *(frontend)* Assign and remove task assignees directly in the list grid, with a preloaded user picker
+* *(frontend)* Edit due, start and end dates in the list grid using the date picker
+
+### Bug Fixes
+
+* *(frontend)* Preserve matching tasks and their ancestors in the filtered list grid
+* *(frontend)* Show a calendar icon instead of the zero date for unset task dates
+
+### Documentation
+
+* *(development)* Document local backend and frontend setup and add a development startup script
 
 ### Improvements
 

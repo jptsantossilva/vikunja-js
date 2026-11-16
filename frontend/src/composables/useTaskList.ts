@@ -98,7 +98,7 @@ export function useTaskList(
 	projectIdGetter: ComputedGetter<number>,
 	projectViewIdGetter: ComputedGetter<number>,
 	sortByDefault: SortBy = SORT_BY_DEFAULT,
-	expandGetter: ComputedGetter<TaskExpansion> = () => ['subtasks'],
+	expandGetter: (params: TaskFilterParams) => TaskExpansion = () => ['subtasks'],
 ) {
 	
 	const projectId = computed(() => projectIdGetter())
@@ -208,7 +208,7 @@ export function useTaskList(
 		params: {
 			...allParams.value,
 			filter_timezone: authStore.settings.timezone,
-			expand: expandGetter(),
+			expand: expandGetter(allParams.value),
 		},
 	}))
 	const query = useTasks(scope, {
@@ -229,6 +229,7 @@ export function useTaskList(
 	}
 
 	return {
+		scope,
 		tasks,
 		loading,
 		totalPages,

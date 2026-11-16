@@ -29,10 +29,25 @@ type adminTeamListBody struct {
 	Body Paginated[models.InviteLinkTeam]
 }
 
+type adminTeamDirectoryBody struct {
+	Body Paginated[models.AdminTeamDirectoryEntry]
+}
+
 func init() { AddRouteRegistrar(RegisterAdminTeamRoutes) }
 
 func RegisterAdminTeamRoutes(api huma.API) {
+	Register(api, huma.Operation{OperationID: "admin-team-directory", Summary: "List teams for administration", Description: "Lists all local and externally managed teams for instance administrators.", Method: http.MethodGet, Path: "/admin/team-directory", Tags: []string{"admin"}}, adminTeamDirectory)
 	Register(api, huma.Operation{OperationID: "admin-teams-list", Summary: "List local teams for invitations", Description: "Includes teams the admin does not belong to. Excludes externally managed teams. Requires admin_panel and user_invites.", Method: http.MethodGet, Path: "/admin/teams", Tags: []string{"admin"}}, adminTeamsList)
+}
+
+func adminTeamDirectory(_ context.Context, in *ListParams) (*adminTeamDirectoryBody, error) {
+	s := db.NewSession()
+	defer s.Close()
+	teams, total, err := models.ListTeamDirectoryAsAdmin(s, in.Q, in.Page, in.PerPage)
+	if err != nil {
+		return nil, translateDomainError(err)
+	}
+	return &adminTeamDirectoryBody{Body: NewPaginated(teams, total, in.Page, in.PerPage)}, nil
 }
 
 func adminTeamsList(_ context.Context, in *ListParams) (*adminTeamListBody, error) {

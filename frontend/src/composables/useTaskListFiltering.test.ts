@@ -1,8 +1,16 @@
 import {describe, it, expect} from 'vitest'
-import {shouldShowTaskInListView, tasksForListPresentation} from './useTaskListFiltering'
+import {shouldShowTaskInListView, tasksForListPresentation, tasksWithMatchingAncestors} from './useTaskListFiltering'
 import {normalizeTask} from '@/client/queries/tasks'
 
 describe('shouldShowTaskInListView', () => {
+	it('keeps completed ancestors of matching descendants without unrelated completed tasks', () => {
+		const root = normalizeTask({id: 1, done: true})
+		const parent = normalizeTask({id: 2, done: true, related_tasks: {parenttask: [{id: 1}]}})
+		const child = normalizeTask({id: 3, done: false, related_tasks: {parenttask: [{id: 2}]}})
+		const sibling = normalizeTask({id: 4, done: true, related_tasks: {parenttask: [{id: 2}]}})
+		expect(tasksWithMatchingAncestors([root, parent, child, sibling], [child]).map(task => task.id))
+			.toEqual([1, 2, 3])
+	})
 	it('keeps child rows for the grid tree but hides them from the compact top level', () => {
 		const parent = normalizeTask({id: 1, title: 'Parent'})
 		const child = normalizeTask({

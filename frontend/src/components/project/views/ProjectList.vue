@@ -123,6 +123,7 @@
 					</draggable>
 
 					<Pagination
+						v-if="!filteredGrid"
 						:total-pages="totalPages"
 						:current-page="currentPage"
 					/>
@@ -156,11 +157,12 @@ import XButton from '@/components/input/Button.vue'
 import {useTaskList} from '@/composables/useTaskList'
 import {useTaskDragToProject} from '@/composables/useTaskDragToProject'
 import {useCurrentProject} from '@/composables/useCurrentProject'
-import {tasksForListPresentation} from '@/composables/useTaskListFiltering'
+import {tasksForListPresentation, tasksWithMatchingAncestors} from '@/composables/useTaskListFiltering'
 import {PERMISSIONS as Permissions} from '@/constants/permissions'
 import {eventToShortcutString} from '@/helpers/shortcut'
 import {calculateItemPosition} from '@/helpers/calculateItemPosition'
-import type {TaskResponse} from '@/client/queries/tasks'
+import {allTasksQuery, type TaskResponse} from '@/client/queries/tasks'
+import {error} from '@/message'
 import {isSavedFilterProject} from '@/client/queries/projects'
 import type {ProjectView, ProjectViewWritable, Task} from '@/client/generated'
 import type {ProjectViewLayout} from '@/types/ProjectViewLayout'
@@ -188,32 +190,6 @@ const ctaVisible = ref(false)
 
 const drag = ref(false)
 
-const {
-	tasks: allTasks,
-	loading,
-	totalPages,
-	currentPage,
-	loadTasks,
-	params,
-	sortByParam,
-} = useTaskList(
-	() => projectId.value,
-	() => props.viewId,
-	{position: 'asc'},
-	() => projectId.value === -1
-		? ['comment_count', 'is_unread']
-		: ['subtasks', 'comment_count', 'is_unread'],
-)
-const showLoading = useDelayedLoading(loading)
-
-const positionMutation = useUpdateTaskPositionMutation()
-
-const dragTasks = ref<TaskResponse[] | null>(null)
-const isPositionSorting = computed(() => 'position' in sortByParam.value)
-
-const baseStore = useBaseStore()
-const {setDraggedTask} = useTaskDragState()
-const {handleTaskDropToProject} = useTaskDragToProject()
 const {currentProject: project} = useCurrentProject()
 const currentView = computed(() => project.value?.views?.find(view => view.id === props.viewId))
 const serverLayout = computed(() => (currentView.value as (ProjectView & {layout?: ProjectViewLayout}) | undefined)?.layout)
@@ -225,8 +201,64 @@ const layoutDraft = useProjectViewLayoutDraft(
 )
 const isGrid = computed(() => layoutDraft.layout.value.mode === 'grid')
 
+const {
+	tasks: allTasks,
+	loading,
+	totalPages,
+	currentPage,
+	loadTasks,
+	params,
+	sortByParam,
+	scope,
+} = useTaskList(
+	() => projectId.value,
+	() => props.viewId,
+	{position: 'asc'},
+	(params) => projectId.value === -1 || (isGrid.value && (params.filter || params.q || currentView.value?.filter?.filter || isSavedFilterProject(project.value)))
+		? ['comment_count', 'is_unread']
+		: ['subtasks', 'comment_count', 'is_unread'],
+)
+const filteredGrid = computed(() => isGrid.value && projectId.value > 0 && Boolean(
+	params.value.filter || params.value.q || currentView.value?.filter?.filter,
+))
+const matchingGridQuery = useQuery(computed(() => ({
+	...allTasksQuery(scope.value),
+	enabled: filteredGrid.value,
+})))
+const gridContextQuery = useQuery(computed(() => ({
+	...allTasksQuery({
+		project: projectId.value,
+		params: {
+			...scope.value.params,
+			filter: '',
+			q: '',
+			// Positions belong to a view; this project-wide lookup has no view ID.
+			sort_by: ['id'],
+			order_by: ['asc'],
+			expand: ['comment_count', 'is_unread'],
+		},
+	}),
+	enabled: filteredGrid.value,
+})))
+watch([matchingGridQuery.error, gridContextQuery.error], errors => {
+	for (const cause of errors) if (cause) error(cause)
+})
+const showLoading = useDelayedLoading(computed(() => loading.value || (filteredGrid.value && (
+	matchingGridQuery.isFetching.value || gridContextQuery.isFetching.value
+))))
+
+const positionMutation = useUpdateTaskPositionMutation()
+
+const dragTasks = ref<TaskResponse[] | null>(null)
+const isPositionSorting = computed(() => 'position' in sortByParam.value)
+
+const baseStore = useBaseStore()
+const {setDraggedTask} = useTaskDragState()
+const {handleTaskDropToProject} = useTaskDragToProject()
 const tasks = computed({
-	get: () => dragTasks.value ?? tasksForListPresentation(allTasks.value, isGrid.value),
+	get: () => dragTasks.value ?? (filteredGrid.value
+		? tasksWithMatchingAncestors(gridContextQuery.data.value ?? [], matchingGridQuery.data.value ?? [])
+		: tasksForListPresentation(allTasks.value, isGrid.value)),
 	set: value => { dragTasks.value = value },
 })
 watch([projectId, () => props.viewId], () => { dragTasks.value = null })
@@ -324,7 +356,11 @@ async function moveNewTasksToSection(newTasks: Task[], sectionId: number) {
 }
 
 async function refreshGrid() {
-	await Promise.all([loadTasks(), bucketQuery.refetch()])
+	await Promise.all([
+		loadTasks(),
+		bucketQuery.refetch(),
+		...(filteredGrid.value ? [matchingGridQuery.refetch(), gridContextQuery.refetch()] : []),
+	])
 }
 
 const isPseudoProject = computed(() => isSavedFilterProject(project.value) || project.value?.id === -1)

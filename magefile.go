@@ -2032,6 +2032,9 @@ func (Dev) TagRelease(ctx context.Context, version string) error {
 	if !strings.HasPrefix(version, "v") {
 		version = "v" + version
 	}
+	if !regexp.MustCompile(`^v[1-9][0-9]\.(?:[1-9]|1[0-2])\.(?:[1-9]|[12][0-9]|3[01])$`).MatchString(version) {
+		return fmt.Errorf("version must use vYY.M.D with no leading zeroes in month or day")
+	}
 
 	fmt.Printf("Creating release %s...\n", version)
 

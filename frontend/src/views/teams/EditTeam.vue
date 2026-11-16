@@ -249,7 +249,7 @@ async function deleteTeam() {
 	} finally {
 		showDeleteModal.value = false
 	}
-	await router.push({name: 'teams.index'})
+	await router.push({name: route.name === 'admin.teams.edit' ? 'admin.teams' : 'teams.index'})
 }
 
 function deleteMember() {

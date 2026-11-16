@@ -1804,6 +1804,7 @@
     }
   },
   "admin": {
+	"externalTeam": "Managed externally",
     "title": "Administration",
     "labels": {
       "users": "Users",

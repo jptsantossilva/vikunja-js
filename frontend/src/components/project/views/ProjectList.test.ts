@@ -11,6 +11,7 @@ import type {Task as ITask} from '@/client/generated'
 const sdk = vi.hoisted(() => ({
 	tasksPositionUpdate: vi.fn(),
 	projectViewTasksList: vi.fn(),
+	projectTasksList: vi.fn(),
 }))
 const {tasksPositionUpdate: updatePosition} = sdk
 
@@ -40,14 +41,15 @@ vi.mock('vue-i18n', async importOriginal => ({
 }))
 
 import ProjectList from './ProjectList.vue'
+import TaskGrid from '@/components/tasks/grid/TaskGrid.vue'
 
 function makeTask(id: number, position: number): ITask {
 	return {id, title: `Task ${id}`, position} as ITask
 }
 
-async function mountList() {
+async function mountList(query = '') {
 	const router = createRouter({history: createMemoryHistory(), routes: [{path: '/', component: {render: () => null}}]})
-	await router.push('/')
+	await router.push(`/${query}`)
 	const wrapper = shallowMount(ProjectList, {
 		props: {
 			isLoadingProject: false,
@@ -81,6 +83,9 @@ function dragEndEvent(taskId: string, newIndex: number) {
 
 describe('ProjectList', () => {
 	beforeEach(() => {
+		localStorage.clear()
+		sdk.projectViewTasksList.mockClear()
+		sdk.projectTasksList.mockResolvedValue({data: {items: [], page: 1, total_pages: 1}})
 		updatePosition.mockReset()
 		updatePosition.mockResolvedValue({data: {position: 200}})
 		// Asymmetric positions: the midpoint between the neighbours must differ from the dragged task's own position.
@@ -91,6 +96,37 @@ describe('ProjectList', () => {
 				total_pages: 1,
 			},
 		})
+	})
+
+	it('requests filtered grid rows without expanding unfiltered subtasks', async () => {
+		localStorage.setItem('project-view-layout-draft:anonymous:1:10', JSON.stringify({mode: 'grid'}))
+		await mountList('?filter=done%20%3D%20false')
+
+		expect(sdk.projectViewTasksList).toHaveBeenLastCalledWith(expect.objectContaining({
+			query: expect.objectContaining({
+				filter: 'done = false',
+				expand: ['comment_count', 'is_unread'],
+			}),
+		}))
+	})
+
+	it('shows a matching child under its completed ancestors across result pages', async () => {
+		localStorage.setItem('project-view-layout-draft:anonymous:1:10', JSON.stringify({mode: 'grid'}))
+		const root = {id: 1, title: 'Root', done: true}
+		const parent = {id: 2, title: 'Parent', done: true, related_tasks: {parenttask: [{id: 1}]}}
+		const child = {id: 3, title: 'Child', done: false, related_tasks: {parenttask: [{id: 2}]}}
+		const other = {id: 4, title: 'Other', done: false}
+		const completed = {id: 5, title: 'Completed', done: true, related_tasks: {parenttask: [{id: 2}]}}
+		sdk.projectViewTasksList.mockImplementation(async ({query}) => ({data: {
+			items: query.page === 1 ? [other] : [child], page: query.page, total_pages: 2,
+		}}))
+		sdk.projectTasksList.mockResolvedValue({data: {items: [root, parent, child, other, completed], total_pages: 1}})
+		const wrapper = await mountList('?filter=done%20%3D%20false')
+		await flushPromises()
+		expect(wrapper.findComponent(TaskGrid).props('tasks').map(task => task.id)).toEqual([1, 2, 3, 4])
+		expect(sdk.projectTasksList).toHaveBeenCalledWith(expect.objectContaining({
+			query: expect.objectContaining({sort_by: ['id'], order_by: ['asc']}),
+		}))
 	})
 
 	it('saves the position of the dropped task', async () => {

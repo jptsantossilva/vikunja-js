@@ -6,6 +6,7 @@
 		:loading="usersLoading"
 		:placeholder="$t('task.assignee.placeholder')"
 		:multiple="true"
+		:inline="inline"
 		:search-results="foundUsers"
 		:show-empty="true"
 		label="name"
@@ -54,8 +55,10 @@ const props = withDefaults(defineProps<{
 	taskId: number,
 	projectId: number,
 	disabled?: boolean,
+	inline?: boolean,
 }>(), {
 	disabled: false,
+	inline: false,
 })
 
 const emit = defineEmits<{
@@ -68,7 +71,11 @@ const removeAssigneeMutation = useRemoveTaskAssigneeMutation()
 const {t} = useI18n({useScope: 'global'})
 
 const userSearch = ref('')
+// Inline editors are mounted when their popup opens, so preload immediately.
 const searchEnabled = ref(false)
+watch(() => props.inline, inline => {
+	if (inline) searchEnabled.value = true
+}, {immediate: true})
 const {users: userResults, isFetching: usersLoading} = useProjectUserSearch(() => props.projectId, userSearch, searchEnabled)
 const assignees = ref<UserWithId[]>([])
 let isAdding = false

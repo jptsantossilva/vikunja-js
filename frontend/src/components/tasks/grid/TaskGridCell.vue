@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import {computed, ref, watch} from 'vue'
+import {computed, nextTick, ref, watch} from 'vue'
 import {klona} from 'klona/lite'
 
 import AssigneeList from '@/components/tasks/partials/AssigneeList.vue'
+import EditAssignees from '@/components/tasks/partials/EditAssignees.vue'
+import Popup from '@/components/misc/Popup.vue'
 import Labels from '@/components/tasks/partials/Labels.vue'
 import PriorityLabel from '@/components/tasks/partials/PriorityLabel.vue'
 import User from '@/components/misc/User.vue'
 import CommentCount from '@/components/tasks/partials/CommentCount.vue'
+import Datepicker from '@/components/input/Datepicker.vue'
+import {parseDateOrNull} from '@/helpers/parseDateOrNull'
 import type {TaskResponse} from '@/client/queries/tasks'
 import {normalizeTask} from '@/client/queries/tasks'
 import {useUpdateTaskMutation} from '@/client/queries/taskMutations'
@@ -33,6 +37,15 @@ const updateTaskMutation = useUpdateTaskMutation(true)
 const saving = ref(false)
 const editingTitle = ref(false)
 const title = ref('')
+const assigneeTrigger = ref<HTMLButtonElement | null>(null)
+const assigneeEditor = ref<HTMLElement | null>(null)
+
+async function openAssignees(toggle: () => boolean) {
+	if (toggle()) {
+		await nextTick()
+		assigneeEditor.value?.querySelector('input')?.focus()
+	}
+}
 
 const dateFields: Partial<Record<ProjectViewLayoutColumnField, 'due_date' | 'start_date' | 'end_date'>> = {
 	due_date: 'due_date',
@@ -43,18 +56,14 @@ const dateFields: Partial<Record<ProjectViewLayoutColumnField, 'due_date' | 'sta
 watch(() => props.task.title, value => title.value = value, {immediate: true})
 
 const dateValue = computed(() => {
-	const value = props.task[fieldProperty.value]
-	if (!value) {
-		return ''
-	}
-	const date = new Date(value)
-	return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)
+	return parseDateOrNull(props.task[fieldProperty.value])
 })
 
 const fieldProperty = computed<'due_date' | 'start_date' | 'end_date'>(() => dateFields[props.field] || 'due_date')
 
 function displayDate(value?: string): string {
-	return value ? new Intl.DateTimeFormat(undefined, {dateStyle: 'medium'}).format(new Date(value)) : '—'
+	const date = parseDateOrNull(value)
+	return date ? new Intl.DateTimeFormat(undefined, {dateStyle: 'medium'}).format(date) : '—'
 }
 
 async function updateTask(patch: Partial<TaskResponse>) {
@@ -86,10 +95,6 @@ async function saveTitle() {
 	await updateTask({title: nextTitle})
 }
 
-function updateDate(value: string) {
-	const nextValue = value === '' ? '' : new Date(`${value}T00:00:00`).toISOString()
-	updateTask({[fieldProperty.value]: nextValue})
-}
 </script>
 
 <template>
@@ -148,6 +153,51 @@ function updateDate(value: string) {
 
 		<span v-else-if="field === 'index'">{{ task.identifier || `#${task.index}` }}</span>
 		<span v-else-if="field === 'project'">{{ projectList.projects[task.project_id]?.title || '—' }}</span>
+		<Popup
+			v-else-if="field === 'assignees' && canWrite"
+			placement="bottom-start"
+			:anchor="assigneeTrigger"
+			sheet-on-mobile
+			:sheet-title="$t('task.attributes.assignees')"
+		>
+			<template #trigger="{toggle, isOpen}">
+				<button
+					ref="assigneeTrigger"
+					type="button"
+					class="task-grid-cell__assignees"
+					:class="{'is-empty': !task.assignees.length}"
+					:aria-label="$t('task.assignee.placeholder')"
+					:aria-expanded="isOpen"
+					@click.stop="openAssignees(toggle)"
+				>
+					<AssigneeList
+						v-if="task.assignees.length"
+						:assignees="task.assignees"
+						:avatar-size="24"
+						:inline="true"
+					/>
+					<Icon
+						v-else
+						icon="user"
+					/>
+				</button>
+			</template>
+			<template #content="{isOpen}">
+				<div
+					v-if="isOpen"
+					ref="assigneeEditor"
+					class="task-grid-cell__assignee-editor"
+				>
+					<EditAssignees
+						inline
+						:model-value="task.assignees"
+						:task-id="task.id"
+						:project-id="task.project_id"
+						@update:modelValue="emit('updated', {...task, assignees: $event ?? []})"
+					/>
+				</div>
+			</template>
+		</Popup>
 		<AssigneeList
 			v-else-if="field === 'assignees' && task.assignees.length"
 			:assignees="task.assignees"
@@ -179,14 +229,21 @@ function updateDate(value: string) {
 				{{ priority === 0 ? $t('task.priority.unset') : priority }}
 			</option>
 		</select>
-		<input
+		<Datepicker
 			v-else-if="['due_date', 'start_date', 'end_date'].includes(field) && canWrite"
-			class="input task-grid-cell__date"
-			type="date"
-			:value="dateValue"
+			:class="dateValue ? 'task-grid-cell__set-date' : 'task-grid-cell__empty-date'"
+			:model-value="dateValue"
 			:disabled="saving"
-			@change="updateDate(($event.target as HTMLInputElement).value)"
+			@update:modelValue="updateTask({[fieldProperty]: $event?.toISOString() ?? ''})"
 		>
+			<template #trigger>
+				<Icon
+					v-if="!dateValue"
+					icon="calendar"
+				/>
+				<span v-else>{{ displayDate(task[fieldProperty]) }}</span>
+			</template>
+		</Datepicker>
 		<span v-else-if="field === 'due_date'">{{ displayDate(task.due_date) }}</span>
 		<span v-else-if="field === 'start_date'">{{ displayDate(task.start_date) }}</span>
 		<span v-else-if="field === 'end_date'">{{ displayDate(task.end_date) }}</span>
@@ -349,10 +406,67 @@ function updateDate(value: string) {
 }
 
 .task-grid-cell__title-input,
-.task-grid-cell__date,
 .task-grid-cell__percent,
 .task-grid-cell__select {
 	block-size: 32px;
 	min-inline-size: 0;
+}
+
+.task-grid-cell__set-date :deep(.show) {
+	padding: .25rem .375rem;
+	border: 1px solid transparent;
+	border-radius: $radius;
+
+	&:hover,
+	&:focus-visible {
+		border-color: var(--grey-300);
+	}
+}
+
+.task-grid-cell__empty-date :deep(.show) {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
+	border: 1px dashed var(--grey-400);
+	border-radius: 50%;
+	color: var(--grey-500);
+
+	&:hover,
+	&:focus-visible {
+		border-color: var(--primary);
+		color: var(--primary);
+	}
+}
+
+.task-grid-cell__assignees {
+	display: inline-flex;
+	align-items: center;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+
+	&.is-empty {
+		justify-content: center;
+		inline-size: 1.5rem;
+		block-size: 1.5rem;
+		border: 1px dashed var(--grey-400);
+		border-radius: 50%;
+		color: var(--grey-500);
+	}
+
+	&:hover,
+	&:focus-visible {
+		color: var(--primary);
+		border-color: var(--primary);
+	}
+}
+
+.task-grid-cell__assignee-editor {
+	inline-size: min(20rem, 90vw);
+	padding: .75rem;
+	background: var(--white);
 }
 </style>

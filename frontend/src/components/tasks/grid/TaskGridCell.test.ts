@@ -10,6 +10,8 @@ import TaskGridCell from './TaskGridCell.vue'
 
 vi.mock('@/message', () => ({error: vi.fn()}))
 vi.mock('@/i18n', () => ({i18n: {global: {t: (key: string) => key}}}))
+const updateTask = vi.hoisted(() => vi.fn())
+vi.mock('@/client/queries/taskMutations', () => ({useUpdateTaskMutation: () => ({mutateAsync: updateTask})}))
 
 const i18n = createI18n({
 	legacy: false,
@@ -127,5 +129,72 @@ describe('TaskGridCell subtask toggle', () => {
 
 		await wrapper.get('.task-grid-cell__title').trigger('click')
 		expect(wrapper.get('.task-grid-cell__title-input').element).toBeInstanceOf(HTMLInputElement)
+	})
+})
+
+describe('TaskGridCell dates', () => {
+	function mountDateCell(dueDate: string | undefined, canWrite = true) {
+		const pinia = createPinia()
+		setActivePinia(pinia)
+		return mount(TaskGridCell, {
+			props: {task: {...parentTask, due_date: dueDate}, field: 'due_date', canWrite},
+			global: {
+				plugins: [pinia, i18n, [VueQueryPlugin, {queryClient: new QueryClient()}]],
+				stubs: {Icon: true, Datepicker: {name: 'Datepicker', props: ['modelValue'], template: '<button @click="$emit(\'update:modelValue\', new Date(\'2026-12-01T12:00:00Z\'))"><slot name="trigger" /></button>'}},
+			},
+		})
+	}
+
+	it.each([undefined, '', '0001-01-01T00:00:00Z'])('offers a date picker for an unset date (%s)', async value => {
+		updateTask.mockResolvedValue({...parentTask, due_date: '2026-12-01T12:00:00Z'})
+		const wrapper = mountDateCell(value)
+		expect(wrapper.find('input[type="date"]').exists()).toBe(false)
+		await wrapper.get('button').trigger('click')
+		expect(wrapper.emitted('updated')?.[0]?.[0]).toMatchObject({due_date: '2026-12-01T12:00:00.000Z'})
+	})
+
+	it('opens the same picker with an existing date and saves the new selection', async () => {
+		updateTask.mockResolvedValue({...parentTask, due_date: '2026-12-01T12:00:00Z'})
+		const wrapper = mountDateCell('2026-11-17T12:00:00Z')
+		expect(wrapper.getComponent({name: 'Datepicker'}).props('modelValue')).toEqual(new Date('2026-11-17T12:00:00Z'))
+		await wrapper.get('button').trigger('click')
+		expect(wrapper.emitted('updated')?.[0]?.[0]).toMatchObject({due_date: '2026-12-01T12:00:00.000Z'})
+	})
+
+	it('shows an empty value to read-only users', () => {
+		expect(mountDateCell('0001-01-01T00:00:00Z', false).text()).toBe('—')
+	})
+})
+
+describe('TaskGridCell assignees', () => {
+	it('opens the editor for a task and reflects assignment changes', async () => {
+		const pinia = createPinia()
+		setActivePinia(pinia)
+		const wrapper = mount(TaskGridCell, {
+			props: {task: {...parentTask, project_id: 3}, field: 'assignees', canWrite: true},
+			global: {
+				plugins: [pinia, i18n, [VueQueryPlugin, {queryClient: new QueryClient()}]],
+				stubs: {
+					Icon: true,
+					Popup: {template: '<div><slot name="trigger" :toggle="() => true" :is-open="true"/><slot name="content" :is-open="true"/></div>'},
+					EditAssignees: {name: 'EditAssignees', props: ['modelValue', 'projectId', 'taskId'], template: '<input />'},
+				},
+			},
+		})
+		await wrapper.get('.task-grid-cell__assignees').trigger('click')
+		const editor = wrapper.getComponent({name: 'EditAssignees'})
+		expect(editor.props()).toMatchObject({taskId: 1, projectId: 3, modelValue: []})
+		editor.vm.$emit('update:modelValue', [{id: 2, username: 'joao'}])
+		expect(wrapper.emitted('updated')?.[0]?.[0]).toMatchObject({assignees: [{id: 2, username: 'joao'}]})
+	})
+
+	it('does not show an assignment control without write access', () => {
+		const pinia = createPinia()
+		setActivePinia(pinia)
+		const wrapper = mount(TaskGridCell, {
+			props: {task: parentTask, field: 'assignees', canWrite: false},
+			global: {plugins: [pinia, i18n, [VueQueryPlugin, {queryClient: new QueryClient()}]], stubs: {Icon: true}},
+		})
+		expect(wrapper.find('.task-grid-cell__assignees').exists()).toBe(false)
 	})
 })

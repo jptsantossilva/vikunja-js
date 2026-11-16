@@ -44,3 +44,21 @@ export function tasksForListPresentation(
 		? tasks
 		: tasks.filter(task => shouldShowTaskInListView(task, tasks))
 }
+
+/** Keep matching tasks and their ancestors from the same project. */
+export function tasksWithMatchingAncestors(tasks: TaskResponse[], matches: TaskResponse[]): TaskResponse[] {
+	const byId = new Map(tasks.map(task => [task.id, task]))
+	// The filtered response carries view-specific positions and other current data.
+	for (const task of matches) byId.set(task.id, task)
+	const included = new Set<number>()
+	const include = (task: TaskResponse) => {
+		if (included.has(task.id)) return
+		included.add(task.id)
+		for (const parent of task.related_tasks.parenttask ?? []) {
+			const fullParent = byId.get(parent.id)
+			if (fullParent) include(fullParent)
+		}
+	}
+	for (const task of matches) include(task)
+	return [...byId.values()].filter(task => included.has(task.id))
+}

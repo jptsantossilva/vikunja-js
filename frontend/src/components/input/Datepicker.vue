@@ -13,12 +13,18 @@
 					v-tooltip="date ? formatDateLong(date) : undefined"
 					class="show"
 					:disabled="disabled || undefined"
+					:aria-label="date === null ? chooseDateLabel : undefined"
 					@click.stop="toggle()"
 				>
-					<i v-if="date === null && emptyLabel !== ''">{{ emptyLabel }}</i>
-					<template v-else>
-						{{ date === null ? chooseDateLabel : formatDisplayDate(date) }}
-					</template>
+					<slot
+						name="trigger"
+						:date="date"
+					>
+						<i v-if="date === null && emptyLabel !== ''">{{ emptyLabel }}</i>
+						<template v-else>
+							{{ date === null ? chooseDateLabel : formatDisplayDate(date) }}
+						</template>
+					</slot>
 				</SimpleButton>
 			</template>
 			<template #header-action>

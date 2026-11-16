@@ -26,6 +26,25 @@ import (
 
 func (InviteLinkTeam) TableName() string { return "teams" }
 
+type AdminTeamDirectoryEntry struct {
+	ID         int64  `json:"id" xorm:"id" doc:"Team ID."`
+	Name       string `json:"name" xorm:"name" doc:"Team name."`
+	ExternalID string `json:"external_id" xorm:"external_id" doc:"External identity provider ID, if managed externally."`
+}
+
+func (AdminTeamDirectoryEntry) TableName() string { return "teams" }
+
+func ListTeamDirectoryAsAdmin(s *xorm.Session, search string, page, perPage int) ([]AdminTeamDirectoryEntry, int64, error) {
+	limit, start := getLimitFromPageIndex(page, perPage)
+	teams := []AdminTeamDirectoryEntry{}
+	query := s.Limit(limit, start)
+	if search != "" {
+		query = query.Where(db.ILIKE("name", search))
+	}
+	total, err := query.OrderBy("id ASC").FindAndCount(&teams)
+	return teams, total, err
+}
+
 func ListTeamsAsAdmin(s *xorm.Session, search string, page, perPage int) ([]InviteLinkTeam, int64, error) {
 	limit, start := getLimitFromPageIndex(page, perPage)
 	teams := []InviteLinkTeam{}

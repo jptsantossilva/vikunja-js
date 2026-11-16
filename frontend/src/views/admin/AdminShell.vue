@@ -32,6 +32,10 @@ const navigationItems = computed(() => [
 		title: t('project.projects'),
 		routeName: 'admin.projects',
 	},
+	{
+		title: t('team.title'),
+		routeName: 'admin.teams',
+	},
 	...(configStore.isProFeatureEnabled(PRO_FEATURE.USER_INVITES) ? [{
 		title: t('admin.inviteLinks.title'),
 		routeName: 'admin.inviteLinks',

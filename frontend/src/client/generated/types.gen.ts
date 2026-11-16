@@ -85,6 +85,21 @@ export type AdminStatusPatchBody = {
     status?: number | null;
 };
 
+export type AdminTeamDirectoryEntry = {
+    /**
+     * External identity provider ID, if managed externally.
+     */
+    external_id?: string;
+    /**
+     * Team ID.
+     */
+    id?: number;
+    /**
+     * Team name.
+     */
+    name?: string;
+};
+
 export type AdminUser = {
     /**
      * A URL to the JSON Schema for this object.
@@ -1268,6 +1283,18 @@ export type PaginatedApiToken = {
      */
     readonly $schema?: string;
     items?: Array<ApiToken> | null;
+    page?: number;
+    per_page?: number;
+    total?: number;
+    total_pages?: number;
+};
+
+export type PaginatedAdminTeamDirectoryEntry = {
+    /**
+     * A URL to the JSON Schema for this object.
+     */
+    readonly $schema?: string;
+    items?: Array<AdminTeamDirectoryEntry> | null;
     page?: number;
     per_page?: number;
     total?: number;
@@ -4615,6 +4642,14 @@ export type PaginatedApiTokenWritable = {
     total_pages?: number;
 };
 
+export type PaginatedAdminTeamDirectoryEntryWritable = {
+    items?: Array<AdminTeamDirectoryEntry> | null;
+    page?: number;
+    per_page?: number;
+    total?: number;
+    total_pages?: number;
+};
+
 export type PaginatedAdminUserWritable = {
     items?: Array<AdminUserWritable> | null;
     page?: number;
@@ -6062,6 +6097,44 @@ export type AdminProjectsPatchOwnerResponses = {
 };
 
 export type AdminProjectsPatchOwnerResponse = AdminProjectsPatchOwnerResponses[keyof AdminProjectsPatchOwnerResponses];
+
+export type AdminTeamDirectoryData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * 1-based page number.
+         */
+        page?: number;
+        /**
+         * Items per page. Defaults to the instance's configured maximum (service.maxitemsperpage, reported as max_items_per_page by /info) and is silently capped at it; asking for more is not an error.
+         */
+        per_page?: number;
+        /**
+         * Search query; filters the list to items matching this string.
+         */
+        q?: string;
+    };
+    url: '/admin/team-directory';
+};
+
+export type AdminTeamDirectoryErrors = {
+    /**
+     * Error
+     */
+    default: VikunjaErrorModel;
+};
+
+export type AdminTeamDirectoryError = AdminTeamDirectoryErrors[keyof AdminTeamDirectoryErrors];
+
+export type AdminTeamDirectoryResponses = {
+    /**
+     * OK
+     */
+    200: PaginatedAdminTeamDirectoryEntry;
+};
+
+export type AdminTeamDirectoryResponse = AdminTeamDirectoryResponses[keyof AdminTeamDirectoryResponses];
 
 export type AdminTeamsListData = {
     body?: never;

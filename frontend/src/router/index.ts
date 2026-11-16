@@ -516,6 +516,21 @@ const router = createRouter({
 					component: () => import('@/views/admin/ProjectsView.vue'),
 				},
 				{
+					path: 'teams',
+					name: 'admin.teams',
+					component: () => import('@/views/admin/TeamsView.vue'),
+				},
+				{
+					path: 'teams/:id',
+					name: 'admin.teams.edit',
+					component: () => import('@/views/teams/EditTeam.vue'),
+				},
+				{
+					path: 'projects/:projectId/share',
+					name: 'admin.projects.share',
+					component: () => import('@/views/project/settings/ProjectSettingsShare.vue'),
+				},
+				{
 					path: 'invite-links',
 					name: 'admin.inviteLinks',
 					component: () => import('@/views/admin/InviteLinksView.vue'),

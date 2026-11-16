@@ -124,6 +124,12 @@
 									>
 										<template #before-delete>
 											<DropdownItem
+												icon="share-alt"
+												:to="{name: 'admin.projects.share', params: {projectId: p.id}}"
+											>
+												{{ $t('project.share.header') }}
+											</DropdownItem>
+											<DropdownItem
 												icon="user-edit"
 												@click="openReassign(p)"
 											>
