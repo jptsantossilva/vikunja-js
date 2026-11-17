@@ -1641,6 +1641,12 @@ h2 .button {
 </style>
 
 <style lang="scss">
+@media screen and (min-width: $desktop) {
+	.modal-dialog:has(.task-view-container.is-modal) .modal-content {
+		max-inline-size: min(90vw, 1600px);
+	}
+}
+
 // global style to override position when the modal task detail is active
 .modal-content .scroll-to-comments-button {
 	inset-block-end: .75rem;

@@ -30,6 +30,7 @@ vi.mock('@/message', () => ({error: errorMessage, success: vi.fn()}))
 
 import {normalizeTask, taskKeys, taskQuery} from '@/client/queries/tasks'
 import Attachments from './Attachments.vue'
+import * as attachmentHelpers from '@/helpers/attachments'
 
 const attachment = {
 	id: 1,
@@ -54,12 +55,12 @@ const TaskHost = defineComponent({
 	},
 })
 
-function mountAttachments() {
+function mountAttachments(taskData: ITask = task) {
 	const queryClient = new QueryClient({defaultOptions: {queries: {
 		retry: false,
 		staleTime: Infinity,
 	}}})
-	queryClient.setQueryData(taskKeys.detail(1), normalizeTask(task))
+	queryClient.setQueryData(taskKeys.detail(1), normalizeTask(taskData))
 
 	const wrapper = mount(TaskHost, {
 		attachTo: document.body,
@@ -71,7 +72,7 @@ function mountAttachments() {
 				User: true,
 				FilePreview: true,
 				AudioPreview: true,
-				ImageLightbox: true,
+				ImageLightbox: {name: 'ImageLightbox', props: ['blobUrl', 'hasPrevious', 'hasNext', 'alt'], template: '<div><slot name="thumbnails" /></div>'},
 				RouterLink: true,
 			},
 			directives: {tooltip: {}, cy: {}},
@@ -86,6 +87,7 @@ function mountAttachments() {
 }
 
 afterEach(() => {
+	vi.restoreAllMocks()
 	mounted.splice(0).forEach(wrapper => wrapper.unmount())
 	renderErrors.length = 0
 	document.body.innerHTML = ''
@@ -94,6 +96,48 @@ afterEach(() => {
 	sdk.taskAttachmentsDownload.mockReset()
 	sdk.taskAttachmentsDelete.mockReset()
 	errorMessage.mockClear()
+})
+
+it('navigates between image attachments and skips other files', async () => {
+	const images = [
+		{id: 11, task_id: 1, file: {name: 'one.jpg', mime: 'image/jpeg'}},
+		attachment,
+		{id: 12, task_id: 1, file: {name: 'two.png', mime: 'image/png'}},
+	] as IAttachment[]
+	vi.spyOn(attachmentHelpers, 'fetchAttachmentUrl').mockImplementation(async item => `blob:${item.id}`)
+	const release = vi.spyOn(attachmentHelpers, 'releaseAttachmentUrl').mockImplementation(() => {})
+	const wrapper = mountAttachments({id: 1, attachments: images} as ITask)
+	await flushPromises()
+	await wrapper.findAll('.attachment-open')[0].trigger('click')
+	await flushPromises()
+	let viewer = wrapper.getComponent({name: 'ImageLightbox'})
+	expect(viewer.props()).toMatchObject({blobUrl: 'blob:11', hasPrevious: false, hasNext: true})
+	viewer.vm.$emit('next')
+	await flushPromises()
+	viewer = wrapper.getComponent({name: 'ImageLightbox'})
+	expect(viewer.props()).toMatchObject({blobUrl: 'blob:12', hasPrevious: true, hasNext: false})
+	expect(release).toHaveBeenCalledWith('blob:11')
+	viewer.vm.$emit('close')
+	await nextTick()
+	expect(release).toHaveBeenCalledWith('blob:12')
+})
+
+it('opens the image selected from the thumbnail strip', async () => {
+	const images = [
+		{id: 21, task_id: 1, file: {name: 'one.jpg', mime: 'image/jpeg'}},
+		{id: 22, task_id: 1, file: {name: 'two.png', mime: 'image/png'}},
+	] as IAttachment[]
+	vi.spyOn(attachmentHelpers, 'fetchAttachmentUrl').mockImplementation(async item => `blob:${item.id}`)
+	vi.spyOn(attachmentHelpers, 'releaseAttachmentUrl').mockImplementation(() => {})
+	const wrapper = mountAttachments({id: 1, attachments: images} as ITask)
+	await flushPromises()
+	await wrapper.findAll('.attachment-open')[0].trigger('click')
+	await flushPromises()
+	expect(wrapper.get('[aria-label="one.jpg"]').attributes('aria-current')).toBe('true')
+	await wrapper.get('[aria-label="two.png"]').trigger('click')
+	await flushPromises()
+	expect(wrapper.getComponent({name: 'ImageLightbox'}).props('blobUrl')).toBe('blob:22')
+	expect(wrapper.get('[aria-label="two.png"]').attributes('aria-current')).toBe('true')
 })
 
 describe('Attachments delete modal', () => {

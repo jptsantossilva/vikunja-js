@@ -171,16 +171,38 @@
 
 		<ImageLightbox
 			v-if="preview?.kind === 'image'"
-			:key="preview.blobUrl"
 			:blob-url="preview.blobUrl"
 			:alt="preview.name"
+			:has-previous="imageIndex > 0"
+			:has-next="imageIndex >= 0 && imageIndex < imageAttachments.length - 1"
 			@close="closePreview"
-		/>
+			@previous="navigateImage(-1)"
+			@next="navigateImage(1)"
+		>
+			<template
+				v-if="imageAttachments.length > 1"
+				#thumbnails
+			>
+				<button
+					v-for="(image, index) in imageAttachments"
+					:key="image.id"
+					type="button"
+					class="image-thumbnail"
+					:class="{'is-current': index === imageIndex}"
+					:aria-label="image.file?.name || $t('misc.imagePreview')"
+					:aria-current="index === imageIndex ? 'true' : undefined"
+					@click.stop="selectImage(image)"
+				>
+					<FilePreview :model-value="image" />
+				</button>
+			</template>
+		</ImageLightbox>
 
 		<!-- Attachment PDF modal -->
 		<Modal
 			:enabled="preview?.kind === 'pdf'"
 			:wide="true"
+			class="pdf-preview-modal"
 			:aria-label="$t('misc.pdfPreview')"
 			@close="closePreview"
 		>
@@ -496,9 +518,12 @@ interface Preview {
 	kind: PreviewKind
 	blobUrl: string
 	name: string
+	attachmentId: number
 }
 
 const preview = ref<Preview | null>(null)
+const imageAttachments = computed(() => attachments.value.filter(canPreviewImage))
+const imageIndex = computed(() => imageAttachments.value.findIndex(attachment => attachment.id === preview.value?.attachmentId))
 const previewLoading = ref(false)
 const previewFailed = ref(false)
 let previewRequestToken = 0
@@ -587,7 +612,7 @@ async function viewOrDownload(attachment: IAttachment) {
 			return
 		}
 		previewLoading.value = false
-		replacePreview({kind, blobUrl, name: attachment.file?.name ?? ''})
+		replacePreview({kind, blobUrl, name: attachment.file?.name ?? '', attachmentId: attachment.id!})
 	} catch (e) {
 		if (requestToken !== previewRequestToken) {
 			return
@@ -596,6 +621,27 @@ async function viewOrDownload(attachment: IAttachment) {
 		if (!isRequestContextAbort(e)) {
 			error(e)
 		}
+	}
+}
+
+async function navigateImage(direction: number) {
+	const attachment = imageAttachments.value[imageIndex.value + direction]
+	if (!attachment || imageIndex.value < 0) return
+	await selectImage(attachment)
+}
+
+async function selectImage(attachment: IAttachment) {
+	if (attachment.id === preview.value?.attachmentId) return
+	const requestToken = ++previewRequestToken
+	try {
+		const blobUrl = await fetchAttachmentUrl({id: attachment.id!, task_id: attachment.task_id!})
+		if (requestToken !== previewRequestToken) {
+			releaseAttachmentUrl(blobUrl)
+			return
+		}
+		replacePreview({kind: 'image', blobUrl, name: attachment.file?.name ?? '', attachmentId: attachment.id!})
+	} catch (e) {
+		if (requestToken === previewRequestToken && !isRequestContextAbort(e)) error(e)
 	}
 }
 
@@ -806,11 +852,32 @@ defineExpose({openFilePicker})
 
 .pdf-preview-iframe {
 	inline-size: 100%;
-	max-inline-size: calc(100% - 4rem);
 	block-size: calc(100vh - 40px);
 	border: none;
 	margin: 0 auto;
 	display: block;
+}
+
+.image-thumbnail {
+	flex: 0 0 4.25rem;
+	block-size: 3rem;
+	padding: 0;
+	border: 2px solid transparent;
+	border-radius: $radius;
+	background: var(--grey-700);
+	overflow: hidden;
+	cursor: pointer;
+
+	&.is-current,
+	&:focus-visible {
+		border-color: white;
+	}
+
+	:deep(img) {
+		inline-size: 100%;
+		block-size: 100%;
+		object-fit: cover;
+	}
 }
 
 .video-preview {
@@ -843,5 +910,13 @@ defineExpose({openFilePicker})
 	padding: .25rem .35rem;
 	border-radius: 4px;
 	font-size: .75rem;
+}
+</style>
+
+<style lang="scss">
+@media screen and (min-width: $desktop) {
+	.pdf-preview-modal .modal-content {
+		max-inline-size: min(90vw, 1600px);
+	}
 }
 </style>

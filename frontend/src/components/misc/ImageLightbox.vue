@@ -8,6 +8,7 @@
 		<div
 			ref="containerRef"
 			class="image-lightbox"
+			:class="{'has-thumbnails': $slots.thumbnails}"
 			@click.self="onBackdropClick"
 			@wheel.prevent="onWheel"
 		>
@@ -47,6 +48,28 @@
 				@pointercancel="onPointerUp"
 				@lostpointercapture="onPointerUp"
 			>
+			<BaseButton
+				v-if="hasPrevious"
+				class="image-lightbox__navigation image-lightbox__navigation--previous"
+				:aria-label="$t('misc.previous')"
+				@click.stop="$emit('previous')"
+			>
+				<Icon icon="angle-left" />
+			</BaseButton>
+			<BaseButton
+				v-if="hasNext"
+				class="image-lightbox__navigation image-lightbox__navigation--next"
+				:aria-label="$t('misc.next')"
+				@click.stop="$emit('next')"
+			>
+				<Icon icon="angle-right" />
+			</BaseButton>
+			<div
+				v-if="$slots.thumbnails"
+				class="image-lightbox__thumbnails"
+			>
+				<slot name="thumbnails" />
+			</div>
 
 			<div
 				v-if="loaded"
@@ -87,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, ref} from 'vue'
+import {computed, onMounted, ref, watch} from 'vue'
 import {useEventListener} from '@vueuse/core'
 
 import Modal from '@/components/misc/Modal.vue'
@@ -107,10 +130,14 @@ import {
 const props = defineProps<{
 	blobUrl: string | null,
 	alt?: string,
+	hasPrevious?: boolean,
+	hasNext?: boolean,
 }>()
 
 const emit = defineEmits<{
 	close: [],
+	previous: [],
+	next: [],
 }>()
 
 // the second click of a double-click lands on the fresh backdrop
@@ -154,6 +181,22 @@ function reset() {
 	translateX.value = 0
 	translateY.value = 0
 }
+
+watch(() => props.blobUrl, () => {
+	loaded.value = false
+	failed.value = false
+	metrics = null
+	reset()
+})
+
+useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+	if ((!props.hasPrevious && !props.hasNext) || event.altKey || event.ctrlKey || event.metaKey) return
+	if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+	event.preventDefault()
+	event.stopPropagation()
+	if (event.key === 'ArrowLeft' && props.hasPrevious) emit('previous')
+	if (event.key === 'ArrowRight' && props.hasNext) emit('next')
+}, {capture: true})
 
 function currentTransform(): ZoomTransform {
 	return {scale: scale.value, translateX: translateX.value, translateY: translateY.value}
@@ -366,6 +409,25 @@ function onPointerUp(event: PointerEvent) {
 </script>
 
 <style scoped lang="scss">
+.image-lightbox__navigation {
+	position: absolute;
+	inset-block-start: 50%;
+	z-index: 1;
+	inline-size: 2.75rem;
+	block-size: 2.75rem;
+	border-radius: 50%;
+	background: rgb(0 0 0 / 65%);
+	color: white;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.35rem;
+	transform: translateY(-50%);
+
+	&--previous { inset-inline-start: 1rem; }
+	&--next { inset-inline-end: 1rem; }
+}
+
 .image-lightbox {
 	position: relative;
 	inline-size: 100%;
@@ -418,6 +480,25 @@ function onPointerUp(event: PointerEvent) {
 		cursor: grabbing;
 		transition: none;
 	}
+}
+
+.has-thumbnails .image-lightbox__image {
+	max-block-size: calc(100vh - 10rem);
+}
+
+.image-lightbox__thumbnails {
+	position: absolute;
+	inset-block-end: .75rem;
+	inset-inline: 4rem;
+	display: flex;
+	gap: .5rem;
+	padding: .25rem;
+	overflow-x: auto;
+	touch-action: pan-x;
+}
+
+.has-thumbnails .image-lightbox__toolbar {
+	inset-block-end: 6.5rem;
 }
 
 .image-lightbox__toolbar {

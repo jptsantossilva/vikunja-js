@@ -9,6 +9,11 @@ All releases can be found on https://code.vikunja.io/vikunja/releases.
 
 ## [Unreleased]
 
+### Improvements
+
+* *(frontend)* Use more screen space for task details and PDF attachment previews
+* *(frontend)* Navigate image attachments with arrows, keyboard shortcuts and selectable thumbnails
+
 ## [26.11.16] - 2026-11-16
 
 ### Features
